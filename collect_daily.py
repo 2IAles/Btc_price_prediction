@@ -24,7 +24,7 @@ Sources:
 import os
 import pandas as pd
 import yfinance as yf
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 DATA_DIR   = os.path.join(os.path.dirname(__file__), "data")
 DATE_COL   = "Date"
@@ -322,6 +322,622 @@ def update_snp500(verbose: bool = True) -> None:
 
 
 # ---------------------------------------------------------------------------
+# DXY (Dollar Index)
+# ---------------------------------------------------------------------------
+
+def update_dxy(verbose: bool = True) -> None:
+    path = os.path.join(DATA_DIR, "dxy_daily.csv")
+    existing = _load_daily(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"DXY   — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+    end   = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if last and last >= today:
+        if verbose:
+            print("  [DXY] already up to date.")
+        return
+
+    if verbose:
+        print(f"  [DXY] downloading yfinance DX-Y.NYB from {start} …")
+    new_data = _download_yf("DX-Y.NYB", start, end)
+    if verbose:
+        print(f"  [DXY] yfinance returned {len(new_data)} rows.")
+
+    combined = pd.concat([existing, new_data], ignore_index=True)
+    _save(combined, path)
+
+    result = _load_daily(path)
+    if verbose:
+        print(f"  [DXY] saved {len(result)} rows → {path}")
+        print(f"         from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# VIX (Volatility Index)
+# ---------------------------------------------------------------------------
+
+def update_vix(verbose: bool = True) -> None:
+    path = os.path.join(DATA_DIR, "vix_daily.csv")
+    existing = _load_daily(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"VIX   — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+    end   = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if last and last >= today:
+        if verbose:
+            print("  [VIX] already up to date.")
+        return
+
+    if verbose:
+        print(f"  [VIX] downloading yfinance ^VIX from {start} …")
+    new_data = _download_yf("^VIX", start, end)
+    if verbose:
+        print(f"  [VIX] yfinance returned {len(new_data)} rows.")
+
+    combined = pd.concat([existing, new_data], ignore_index=True)
+    _save(combined, path)
+
+    result = _load_daily(path)
+    if verbose:
+        print(f"  [VIX] saved {len(result)} rows → {path}")
+        print(f"         from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# Helpers for single-value series (Date, Value)
+# ---------------------------------------------------------------------------
+
+def _load_single(path: str) -> pd.DataFrame:
+    """Load a Date,Value CSV; returns empty DataFrame if absent."""
+    if not os.path.isfile(path):
+        return pd.DataFrame(columns=[DATE_COL, "Value"])
+    df = pd.read_csv(path, parse_dates=[DATE_COL])
+    df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.date
+    return df.sort_values(DATE_COL).reset_index(drop=True)
+
+
+def _save_single(df: pd.DataFrame, path: str) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    df = df.sort_values(DATE_COL).drop_duplicates(DATE_COL).reset_index(drop=True)
+    df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.strftime("%Y-%m-%d")
+    df["Value"] = df["Value"].round(6)
+    df[[DATE_COL, "Value"]].to_csv(path, index=False)
+
+
+# ---------------------------------------------------------------------------
+# US 10-Year Treasury Yield
+# ---------------------------------------------------------------------------
+
+def update_us10y(verbose: bool = True) -> None:
+    path = os.path.join(DATA_DIR, "us10y_daily.csv")
+    existing = _load_daily(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"US10Y — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+    end   = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if last and last >= today:
+        if verbose:
+            print("  [US10Y] already up to date.")
+        return
+
+    if verbose:
+        print(f"  [US10Y] downloading yfinance ^TNX from {start} …")
+    new_data = _download_yf("^TNX", start, end)
+    if verbose:
+        print(f"  [US10Y] yfinance returned {len(new_data)} rows.")
+
+    combined = pd.concat([existing, new_data], ignore_index=True)
+    _save(combined, path)
+
+    result = _load_daily(path)
+    if verbose:
+        print(f"  [US10Y] saved {len(result)} rows → {path}")
+        print(f"           from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# Fed Funds Rate (FRED — DFF, daily effective rate)
+# ---------------------------------------------------------------------------
+
+def update_fedfunds(verbose: bool = True) -> None:
+    import requests
+    from io import StringIO
+
+    path = os.path.join(DATA_DIR, "fedfunds_daily.csv")
+    existing = _load_single(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"FedFunds — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    if last and last >= today:
+        if verbose:
+            print("  [FED] already up to date.")
+        return
+
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+
+    url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
+    if verbose:
+        print(f"  [FED] fetching FRED DFF from {start} …")
+    r = requests.get(url, timeout=60)
+    r.raise_for_status()
+
+    df = pd.read_csv(StringIO(r.text))
+    df.columns = [DATE_COL, "Value"]
+    df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.date
+    df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+    df = df[df[DATE_COL] >= date(2012, 1, 1)].dropna()
+
+    if last is not None:
+        df = df[df[DATE_COL] > last]
+
+    if verbose:
+        print(f"  [FED] fetched {len(df)} new rows.")
+
+    combined = pd.concat([existing, df], ignore_index=True)
+    _save_single(combined, path)
+
+    result = _load_single(path)
+    if verbose:
+        print(f"  [FED] saved {len(result)} rows → {path}")
+        print(f"         from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# Oil (WTI Crude — CL=F)
+# ---------------------------------------------------------------------------
+
+def update_oil(verbose: bool = True) -> None:
+    path = os.path.join(DATA_DIR, "oil_daily.csv")
+    existing = _load_daily(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"Oil   — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+    end   = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if last and last >= today:
+        if verbose:
+            print("  [OIL] already up to date.")
+        return
+
+    if verbose:
+        print(f"  [OIL] downloading yfinance CL=F from {start} …")
+    new_data = _download_yf("CL=F", start, end)
+    if verbose:
+        print(f"  [OIL] yfinance returned {len(new_data)} rows.")
+
+    combined = pd.concat([existing, new_data], ignore_index=True)
+    _save(combined, path)
+
+    result = _load_daily(path)
+    if verbose:
+        print(f"  [OIL] saved {len(result)} rows → {path}")
+        print(f"         from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# Silver (SI=F)
+# ---------------------------------------------------------------------------
+
+def update_silver(verbose: bool = True) -> None:
+    path = os.path.join(DATA_DIR, "silver_daily.csv")
+    existing = _load_daily(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"Silver — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
+    end   = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if last and last >= today:
+        if verbose:
+            print("  [SLV] already up to date.")
+        return
+
+    if verbose:
+        print(f"  [SLV] downloading yfinance SI=F from {start} …")
+    new_data = _download_yf("SI=F", start, end)
+    if verbose:
+        print(f"  [SLV] yfinance returned {len(new_data)} rows.")
+
+    combined = pd.concat([existing, new_data], ignore_index=True)
+    _save(combined, path)
+
+    result = _load_daily(path)
+    if verbose:
+        print(f"  [SLV] saved {len(result)} rows → {path}")
+        print(f"         from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# BTC Funding Rate (Binance BTCUSDT perpetual — daily average)
+# Disponible depuis septembre 2019. Format: Date, Value (moyenne journalière).
+# ---------------------------------------------------------------------------
+
+def update_funding_rate(verbose: bool = True) -> None:
+    import requests as _req
+    import time
+
+    path = os.path.join(DATA_DIR, "btc_funding_rate_daily.csv")
+    existing = _load_single(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"BTC Funding Rate — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    if last and last >= today:
+        if verbose:
+            print("  [FUND] already up to date.")
+        return
+
+    start_dt = datetime(last.year, last.month, last.day) + timedelta(days=1) \
+               if last else datetime(2019, 9, 10)
+    end_dt   = datetime(today.year, today.month, today.day) + timedelta(days=1)
+
+    url    = "https://fapi.binance.com/fapi/v1/fundingRate"
+    symbol = "BTCUSDT"
+    limit  = 1000
+    all_rows = []
+    current = start_dt
+
+    if verbose:
+        print(f"  [FUND] fetching Binance funding rates from {start_dt.date()} …")
+
+    while current < end_dt:
+        window_end = min(current + timedelta(days=90), end_dt)
+        params = {
+            "symbol":    symbol,
+            "startTime": int(current.timestamp() * 1000),
+            "endTime":   int(window_end.timestamp() * 1000),
+            "limit":     limit,
+        }
+        r = _req.get(url, params=params, timeout=30)
+        r.raise_for_status()
+        chunk = r.json()
+        if chunk:
+            all_rows.extend(chunk)
+        # Advance by the window size regardless of chunk size
+        current = window_end
+        time.sleep(0.1)
+
+    if not all_rows:
+        if verbose:
+            print("  [FUND] no new data.")
+        return
+
+    df = pd.DataFrame(all_rows)
+    df[DATE_COL] = pd.to_datetime(df["fundingTime"], unit="ms").dt.date
+    df["Value"]  = df["fundingRate"].astype(float)
+    # Average the three daily funding rates (00:00, 08:00, 16:00 UTC)
+    daily = df.groupby(DATE_COL)["Value"].mean().reset_index()
+    daily = daily[daily[DATE_COL] < today]
+
+    if verbose:
+        print(f"  [FUND] {len(daily)} daily rows after aggregation.")
+
+    combined = pd.concat([existing, daily], ignore_index=True)
+    _save_single(combined, path)
+
+    result = _load_single(path)
+    if verbose:
+        print(f"  [FUND] saved {len(result)} rows → {path}")
+        print(f"          from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# BTC Hash Rate (Blockchain.info — TH/s, daily)
+# ---------------------------------------------------------------------------
+
+def update_hashrate(verbose: bool = True) -> None:
+    import requests as _req
+
+    path = os.path.join(DATA_DIR, "btc_hashrate_daily.csv")
+    existing = _load_single(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"BTC HashRate — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    if last and last >= today:
+        if verbose:
+            print("  [HASH] already up to date.")
+        return
+
+    if verbose:
+        print("  [HASH] fetching blockchain.info hash-rate (all history) …")
+
+    url = "https://api.blockchain.info/charts/hash-rate?timespan=all&format=json&sampled=false"
+    r = _req.get(url, timeout=60)
+    r.raise_for_status()
+    values = r.json()["values"]
+
+    df = pd.DataFrame(values)          # columns: x (unix ts), y (hash rate)
+    df[DATE_COL] = pd.to_datetime(df["x"], unit="s").dt.normalize()
+    df = df.rename(columns={"y": "Value"}).drop(columns="x")
+    df = df[df[DATE_COL] >= pd.Timestamp("2012-01-01")]
+    df[DATE_COL] = df[DATE_COL].dt.date
+
+    if last is not None:
+        df = df[df[DATE_COL] > last]
+
+    if verbose:
+        print(f"  [HASH] {len(df)} new rows.")
+
+    combined = pd.concat([existing, df], ignore_index=True)
+    _save_single(combined, path)
+
+    result = _load_single(path)
+    if verbose:
+        print(f"  [HASH] saved {len(result)} rows → {path}")
+        print(f"          from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# MVRV & NUPL (CoinMetrics community API)
+# NUPL is derived from MVRV: NUPL = 1 - (1 / MVRV)
+# ---------------------------------------------------------------------------
+
+def _fetch_coinmetrics(metric: str, start: str, verbose: bool) -> pd.DataFrame:
+    """Paginate through CoinMetrics community API for a single BTC metric."""
+    import requests as _req
+
+    url    = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
+    rows   = []
+    params = {
+        "assets":     "btc",
+        "metrics":    metric,
+        "start_time": start,
+        "page_size":  1000,
+    }
+
+    while True:
+        r = _req.get(url, params=params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        rows.extend(data.get("data", []))
+        next_token = data.get("next_page_token")
+        if not next_token:
+            break
+        # Keep original params and add the pagination token
+        params = {**params, "next_page_token": next_token}
+        params.pop("start_time", None)  # start_time conflicts with next_page_token
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    df[DATE_COL] = pd.to_datetime(df["time"]).dt.date
+    df["Value"]  = pd.to_numeric(df[metric], errors="coerce")
+    return df[[DATE_COL, "Value"]].dropna()
+
+
+def update_mvrv_nupl(verbose: bool = True) -> None:
+    mvrv_path = os.path.join(DATA_DIR, "btc_mvrv_daily.csv")
+    nupl_path = os.path.join(DATA_DIR, "btc_nupl_daily.csv")
+
+    existing_mvrv = _load_single(mvrv_path)
+    last = _last_date(existing_mvrv)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"MVRV/NUPL — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    if last and last >= today:
+        if verbose:
+            print("  [MVRV] already up to date.")
+        return
+
+    start = (last + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00Z") if last else "2012-01-01T00:00:00Z"
+
+    if verbose:
+        print(f"  [MVRV] fetching CoinMetrics CapMVRVCur from {start[:10]} …")
+
+    new_mvrv = _fetch_coinmetrics("CapMVRVCur", start, verbose)
+    if verbose:
+        print(f"  [MVRV] {len(new_mvrv)} new rows.")
+
+    # MVRV
+    combined_mvrv = pd.concat([existing_mvrv, new_mvrv], ignore_index=True)
+    _save_single(combined_mvrv, mvrv_path)
+
+    # NUPL = 1 - (1 / MVRV)
+    all_mvrv = _load_single(mvrv_path)
+    nupl_df  = all_mvrv.copy()
+    nupl_df["Value"] = (1 - (1 / nupl_df["Value"])).round(6)
+    nupl_df.to_csv(nupl_path, index=False)
+
+    result = _load_single(mvrv_path)
+    if verbose:
+        print(f"  [MVRV] saved {len(result)} rows → {mvrv_path}")
+        print(f"  [NUPL] saved {len(result)} rows → {nupl_path}")
+        print(f"          from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
+# Google Trends "bitcoin" (weekly, rescaled across overlapping windows)
+# Granularity: 1-year windows → weekly data (7-day intervals).
+# Consecutive windows share a 3-month overlap used to rescale new data
+# onto the existing scale.
+# Incremental: on subsequent runs only the last 1–2 windows are fetched.
+# ---------------------------------------------------------------------------
+
+def _fetch_trends_window(pt, ws: date, we: date, retries: int = 3) -> pd.DataFrame:
+    """Fetch a single Google Trends window with retry on rate-limit."""
+    import time
+    timeframe = f"{ws.strftime('%Y-%m-%d')} {we.strftime('%Y-%m-%d')}"
+    for attempt in range(retries):
+        try:
+            pt.build_payload(["bitcoin"], timeframe=timeframe)
+            time.sleep(2)
+            df = pt.interest_over_time()
+            if df.empty:
+                return pd.DataFrame()
+            df = df[["bitcoin"]].rename(columns={"bitcoin": "Value"})
+            df.index = pd.to_datetime(df.index).date
+            df.index.name = DATE_COL
+            return df.astype(float)
+        except Exception as e:
+            wait = 10 * (attempt + 1)
+            print(f"    window {ws}→{we} attempt {attempt+1} failed: {e}. Retrying in {wait}s …")
+            time.sleep(wait)
+    return pd.DataFrame()
+
+
+def update_google_trends(verbose: bool = True) -> None:
+    import time
+
+    try:
+        from pytrends.request import TrendReq
+    except ImportError:
+        print("  [TRENDS] pytrends not installed. Run: pip install pytrends")
+        return
+
+    path = os.path.join(DATA_DIR, "google_trends_bitcoin.csv")
+    existing = _load_single(path)
+    last = _last_date(existing)
+
+    if verbose:
+        print(f"\n{'='*50}")
+        print(f"Google Trends — last date: {last or 'none (first run)'}")
+
+    today = date.today()
+    if last and (today - last).days < 7:
+        if verbose:
+            print("  [TRENDS] already up to date (updated within last 7 days).")
+        return
+
+    pt = TrendReq(hl="en-US", tz=0)
+
+    if last is None:
+        # First run: build all windows from 2012 with 3-month overlap for rescaling
+        windows = []
+        win_start = date(2012, 1, 1)
+        while win_start < today:
+            win_end = min(win_start + timedelta(days=365), today)
+            windows.append((win_start, win_end))
+            if win_end >= today:  # covered everything, stop
+                break
+            win_start = win_end - timedelta(days=90)
+
+        if verbose:
+            print(f"  [TRENDS] first run — fetching {len(windows)} windows …")
+
+        series_list = []
+        for i, (ws, we) in enumerate(windows):
+            if verbose:
+                print(f"    [{i+1}/{len(windows)}] {ws} → {we}")
+            df = _fetch_trends_window(pt, ws, we)
+            if not df.empty:
+                series_list.append(df)
+
+        if not series_list:
+            print("  [TRENDS] no data fetched.")
+            return
+
+        # Rescale all windows onto the scale of the first
+        rescaled = series_list[0].copy()
+        for i in range(1, len(series_list)):
+            curr = series_list[i].copy()
+            overlap_idx = rescaled.index[rescaled.index >= curr.index[0]]
+            if len(overlap_idx) == 0:
+                rescaled = pd.concat([rescaled, curr])
+                continue
+            ref_mean  = rescaled.loc[overlap_idx, "Value"].mean()
+            curr_mean = curr.loc[curr.index <= overlap_idx[-1], "Value"].mean()
+            if curr_mean > 0 and ref_mean > 0:
+                curr = curr * (ref_mean / curr_mean)
+            new_part = curr[curr.index > overlap_idx[-1]]
+            rescaled = pd.concat([rescaled, new_part])
+
+    else:
+        # Incremental: fetch only the last window (overlap) + new window
+        # Use a 3-month anchor before `last` to compute rescaling ratio
+        anchor_start = max(last - timedelta(days=90), date(2012, 1, 1))
+        anchor_end   = min(anchor_start + timedelta(days=365), today)
+        new_start    = anchor_end - timedelta(days=90)
+        new_end      = min(new_start + timedelta(days=365), today)
+
+        if verbose:
+            print(f"  [TRENDS] incremental — anchor {anchor_start}→{anchor_end}, new {new_start}→{new_end}")
+
+        anchor_df = _fetch_trends_window(pt, anchor_start, anchor_end)
+        new_df    = _fetch_trends_window(pt, new_start, new_end)
+
+        if anchor_df.empty or new_df.empty:
+            print("  [TRENDS] fetch failed, no update.")
+            return
+
+        # Rescale new_df onto existing scale via anchor overlap
+        overlap_idx = anchor_df.index[anchor_df.index >= new_df.index[0]]
+        if len(overlap_idx) > 0:
+            ref_mean  = anchor_df.loc[overlap_idx, "Value"].mean()
+            curr_mean = new_df.loc[new_df.index <= overlap_idx[-1], "Value"].mean()
+            if curr_mean > 0 and ref_mean > 0:
+                new_df = new_df * (ref_mean / curr_mean)
+
+        new_rows = new_df[new_df.index > last].reset_index()
+        new_rows.columns = [DATE_COL, "Value"]
+        new_rows[DATE_COL] = pd.to_datetime(new_rows[DATE_COL]).dt.date
+
+        rescaled_df = pd.concat([existing, new_rows], ignore_index=True)
+        rescaled_df = rescaled_df.sort_values(DATE_COL).drop_duplicates(DATE_COL)
+        rescaled_df["Value"] = rescaled_df["Value"].clip(0, 100).round(2)
+        _save_single(rescaled_df, path)
+
+        result = _load_single(path)
+        if verbose:
+            print(f"  [TRENDS] saved {len(result)} rows → {path}")
+            print(f"            from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+        return
+
+    rescaled = rescaled.reset_index()
+    rescaled.columns = [DATE_COL, "Value"]
+    rescaled["Value"] = rescaled["Value"].clip(0, 100).round(2)
+    rescaled[DATE_COL] = pd.to_datetime(rescaled[DATE_COL]).dt.date
+
+    _save_single(rescaled, path)
+
+    result = _load_single(path)
+    if verbose:
+        print(f"  [TRENDS] saved {len(result)} rows → {path}")
+        print(f"            from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -330,4 +946,14 @@ if __name__ == "__main__":
     update_xau()
     update_eth()
     update_snp500()
+    update_dxy()
+    update_vix()
+    update_us10y()
+    update_fedfunds()
+    update_oil()
+    update_silver()
+    update_funding_rate()
+    update_hashrate()
+    update_mvrv_nupl()
+    update_google_trends()
     print("\nDone.")
