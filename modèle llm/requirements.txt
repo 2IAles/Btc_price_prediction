@@ -1,0 +1,21 @@
+# =============================================================
+# Dépendances pour le benchmark BTC Price Prediction
+# =============================================================
+# Installation : pip install -r requirements.txt
+# GPU (optionnel) : pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# Deep Learning
+torch>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Machine Learning classique
+xgboost>=2.0.0
+scikit-learn>=1.3.0
+
+# Visualisation (optionnel, pour les graphiques)
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Statistiques (optionnel, pour ARIMA baseline)
+statsmodels>=0.14.0

@@ -818,6 +818,18 @@ def _fetch_trends_window(pt, ws: date, we: date, retries: int = 3) -> pd.DataFra
 
 
 def update_google_trends(verbose: bool = True) -> None:
+    """Fetch Google Trends 'bitcoin' interest as a single request covering 2012→today.
+
+    For periods > 5 years, pytrends returns monthly data normalised to the true
+    global peak (2021 ATH = 100).  A single request avoids window-stitching
+    entirely: any multi-window approach fails for Bitcoin because interest grew
+    ~100× from 2012 to 2021, so the rescaling ratio between adjacent windows
+    always amplifies future values beyond 100 and clip() saturates everything.
+
+    Granularity: monthly (one row per month).  Forward-fill to daily in the
+    ML preprocessing pipeline.
+    Update cadence: re-fetches the full history once per month.
+    """
     import time
 
     try:
@@ -830,106 +842,54 @@ def update_google_trends(verbose: bool = True) -> None:
     existing = _load_single(path)
     last = _last_date(existing)
 
+    today = date.today()
+
     if verbose:
         print(f"\n{'='*50}")
         print(f"Google Trends — last date: {last or 'none (first run)'}")
 
-    today = date.today()
-    if last and (today - last).days < 7:
+    # Monthly data: refresh once a month is enough
+    if last and (today - last).days < 30:
         if verbose:
-            print("  [TRENDS] already up to date (updated within last 7 days).")
+            print("  [TRENDS] already up to date (updated within last 30 days).")
         return
 
     pt = TrendReq(hl="en-US", tz=0)
 
-    if last is None:
-        # First run: build all windows from 2012 with 3-month overlap for rescaling
-        windows = []
-        win_start = date(2012, 1, 1)
-        while win_start < today:
-            win_end = min(win_start + timedelta(days=365), today)
-            windows.append((win_start, win_end))
-            if win_end >= today:  # covered everything, stop
-                break
-            win_start = win_end - timedelta(days=90)
+    # Single request: 2012-01-01 → today.
+    # pytrends returns monthly granularity for periods > 5 years, with all
+    # values correctly normalised relative to the global maximum in the range.
+    timeframe = f"2012-01-01 {today.strftime('%Y-%m-%d')}"
+    if verbose:
+        print(f"  [TRENDS] fetching full history 2012→{today} (monthly, single request) …")
 
-        if verbose:
-            print(f"  [TRENDS] first run — fetching {len(windows)} windows …")
-
-        series_list = []
-        for i, (ws, we) in enumerate(windows):
-            if verbose:
-                print(f"    [{i+1}/{len(windows)}] {ws} → {we}")
-            df = _fetch_trends_window(pt, ws, we)
+    df = pd.DataFrame()
+    for attempt in range(3):
+        try:
+            pt.build_payload(["bitcoin"], timeframe=timeframe)
+            time.sleep(2)
+            df = pt.interest_over_time()
             if not df.empty:
-                series_list.append(df)
+                break
+        except Exception as e:
+            wait = 10 * (attempt + 1)
+            print(f"    attempt {attempt + 1} failed: {e}. Retrying in {wait}s …")
+            time.sleep(wait)
 
-        if not series_list:
-            print("  [TRENDS] no data fetched.")
-            return
-
-        # Rescale all windows onto the scale of the first
-        rescaled = series_list[0].copy()
-        for i in range(1, len(series_list)):
-            curr = series_list[i].copy()
-            overlap_idx = rescaled.index[rescaled.index >= curr.index[0]]
-            if len(overlap_idx) == 0:
-                rescaled = pd.concat([rescaled, curr])
-                continue
-            ref_mean  = rescaled.loc[overlap_idx, "Value"].mean()
-            curr_mean = curr.loc[curr.index <= overlap_idx[-1], "Value"].mean()
-            if curr_mean > 0 and ref_mean > 0:
-                curr = curr * (ref_mean / curr_mean)
-            new_part = curr[curr.index > overlap_idx[-1]]
-            rescaled = pd.concat([rescaled, new_part])
-
-    else:
-        # Incremental: fetch only the last window (overlap) + new window
-        # Use a 3-month anchor before `last` to compute rescaling ratio
-        anchor_start = max(last - timedelta(days=90), date(2012, 1, 1))
-        anchor_end   = min(anchor_start + timedelta(days=365), today)
-        new_start    = anchor_end - timedelta(days=90)
-        new_end      = min(new_start + timedelta(days=365), today)
-
-        if verbose:
-            print(f"  [TRENDS] incremental — anchor {anchor_start}→{anchor_end}, new {new_start}→{new_end}")
-
-        anchor_df = _fetch_trends_window(pt, anchor_start, anchor_end)
-        new_df    = _fetch_trends_window(pt, new_start, new_end)
-
-        if anchor_df.empty or new_df.empty:
-            print("  [TRENDS] fetch failed, no update.")
-            return
-
-        # Rescale new_df onto existing scale via anchor overlap
-        overlap_idx = anchor_df.index[anchor_df.index >= new_df.index[0]]
-        if len(overlap_idx) > 0:
-            ref_mean  = anchor_df.loc[overlap_idx, "Value"].mean()
-            curr_mean = new_df.loc[new_df.index <= overlap_idx[-1], "Value"].mean()
-            if curr_mean > 0 and ref_mean > 0:
-                new_df = new_df * (ref_mean / curr_mean)
-
-        new_rows = new_df[new_df.index > last].reset_index()
-        new_rows.columns = [DATE_COL, "Value"]
-        new_rows[DATE_COL] = pd.to_datetime(new_rows[DATE_COL]).dt.date
-
-        rescaled_df = pd.concat([existing, new_rows], ignore_index=True)
-        rescaled_df = rescaled_df.sort_values(DATE_COL).drop_duplicates(DATE_COL)
-        rescaled_df["Value"] = rescaled_df["Value"].clip(0, 100).round(2)
-        _save_single(rescaled_df, path)
-
-        result = _load_single(path)
-        if verbose:
-            print(f"  [TRENDS] saved {len(result)} rows → {path}")
-            print(f"            from {result[DATE_COL].min()} to {result[DATE_COL].max()}")
+    if df.empty:
+        print("  [TRENDS] fetch failed — no data returned.")
         return
 
-    rescaled = rescaled.reset_index()
-    rescaled.columns = [DATE_COL, "Value"]
-    rescaled["Value"] = rescaled["Value"].clip(0, 100).round(2)
-    rescaled[DATE_COL] = pd.to_datetime(rescaled[DATE_COL]).dt.date
+    df = df[["bitcoin"]].rename(columns={"bitcoin": "Value"}).astype(float)
+    df.index = pd.to_datetime(df.index).date
+    df.index.name = DATE_COL
 
-    _save_single(rescaled, path)
+    result_df = df.reset_index()
+    result_df.columns = [DATE_COL, "Value"]
+    result_df["Value"] = result_df["Value"].clip(0, 100).round(2)
+    result_df[DATE_COL] = pd.to_datetime(result_df[DATE_COL]).dt.date
+
+    _save_single(result_df, path)
 
     result = _load_single(path)
     if verbose:
