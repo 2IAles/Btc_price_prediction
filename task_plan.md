@@ -181,7 +181,7 @@ Dans chaque fichier modèle, la seule modification est la couche finale :
 
 ---
 
-## Phase 4 — Analyse des Résultats (`04_results_analysis.ipynb`) [in_progress]
+## Phase 4 — Analyse des Résultats (`04_results_analysis.ipynb`) [x]
 
 1. Courbes ROC comparatives
 2. Matrice de confusion du meilleur modèle
@@ -193,7 +193,7 @@ Dans chaque fichier modèle, la seule modification est la couche finale :
 
 ---
 
-## Phase 5 — Prédicteur (`05_predictor.py` + `example_usage.py`) [ ]
+## Phase 5 — Prédicteur (`05_predictor.py` + `example_usage.py`) [x]
 
 ```python
 from predictor import BTCPredictor
@@ -209,7 +209,7 @@ La classe `BTCPredictor` :
 
 ---
 
-## Phase 6 — Rapport (`rapport.ipynb`) [ ]
+## Phase 6 — Rapport (`rapport.ipynb`) [x]
 
 Structure (max 15 pages) :
 1. Problématique
