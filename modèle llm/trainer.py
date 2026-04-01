@@ -61,12 +61,12 @@ class EarlyStopping:
 class Trainer:
     """
     Entraîneur unifié pour tous les modèles PyTorch du projet.
-    
-    Utilise MSE Loss car c'est un problème de régression (prédire un prix continu).
-    Optimizer Adam avec learning rate scheduler ReduceLROnPlateau qui réduit
-    automatiquement le learning rate quand la validation stagne.
+
+    Classification binaire : BCEWithLogitsLoss (combine sigmoid + BCE pour
+    plus de stabilité numérique). Le modèle sort des logits bruts ; sigmoid
+    est appliqué uniquement à l'inférence dans predict().
     """
-    
+
     def __init__(
         self,
         model: nn.Module,
@@ -86,17 +86,17 @@ class Trainer:
         self.batch_size = batch_size
         self.epochs = epochs
 
-        # MSE Loss pour la régression
-        self.criterion = nn.MSELoss()
-        
+        # BCEWithLogitsLoss pour la classification binaire
+        self.criterion = nn.BCEWithLogitsLoss()
+
         # Adam : optimizer adaptatif qui ajuste le LR par paramètre
         self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        
+
         # Scheduler : divise le LR par 2 si la val_loss ne baisse plus pendant 5 époques
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.5, patience=5, verbose=False
         )
-        
+
         self.early_stopping = EarlyStopping(patience=patience)
         self.history = {"train_loss": [], "val_loss": []}
 
@@ -206,14 +206,15 @@ class Trainer:
         return self.history
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """Génère des prédictions pour les données fournies."""
+        """Retourne les probabilités de la classe 1 (après sigmoid sur les logits)."""
         self.model.eval()
         X_tensor = torch.FloatTensor(X).to(self.device)
 
         with torch.no_grad():
-            predictions = self.model(X_tensor).squeeze().cpu().numpy()
+            logits = self.model(X_tensor).squeeze()
+            probs  = torch.sigmoid(logits).cpu().numpy()
 
-        return predictions
+        return probs
 
     def count_parameters(self) -> int:
         """Compte le nombre total de paramètres entraînables du modèle."""

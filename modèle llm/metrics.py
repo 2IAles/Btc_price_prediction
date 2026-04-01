@@ -1,107 +1,62 @@
 """
-Métriques d'évaluation pour la prédiction de séries temporelles financières.
+Métriques d'évaluation pour la classification binaire (label_dir_1d).
 
-On utilise plusieurs métriques complémentaires car chacune capture un aspect
-différent de la qualité des prédictions :
-- MAE : erreur moyenne absolue, facile à interpréter en dollars
-- RMSE : pénalise davantage les grosses erreurs
-- MAPE : erreur relative en pourcentage
-- R² : variance expliquée par le modèle
-- Direction Accuracy : capacité à prédire si le prix monte ou descend
+Métrique principale : F1-score (classe 1 = hausse)
+Métriques secondaires : Accuracy, AUC-ROC, Precision, Recall
 """
 
 import numpy as np
 from typing import Dict
-
-
-def compute_mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Mean Absolute Error — erreur moyenne en valeur absolue."""
-    return float(np.mean(np.abs(y_true - y_pred)))
-
-
-def compute_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Root Mean Squared Error — pénalise les grosses déviations."""
-    return float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
-
-
-def compute_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Mean Absolute Percentage Error — erreur relative moyenne."""
-    # Filtre les zéros pour éviter la division par zéro
-    mask = y_true != 0
-    if mask.sum() == 0:
-        return float("inf")
-    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
-
-
-def compute_r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Coefficient de détermination R².
-    
-    R² = 1 signifie que le modèle explique 100% de la variance.
-    R² = 0 signifie que le modèle fait aussi bien qu'une prédiction constante (la moyenne).
-    R² < 0 signifie que le modèle fait pire que la moyenne.
-    """
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    if ss_tot == 0:
-        return 0.0
-    return float(1 - ss_res / ss_tot)
-
-
-def compute_direction_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Précision directionnelle — pourcentage de fois où le modèle prédit
-    correctement la direction du mouvement (hausse vs baisse).
-    
-    C'est la métrique la plus importante pour le trading :
-    même si l'amplitude est fausse, si la direction est bonne,
-    la stratégie peut être profitable.
-    """
-    if len(y_true) < 2:
-        return 0.0
-    # Direction réelle et prédite (variation par rapport au pas précédent)
-    true_direction = np.sign(np.diff(y_true))
-    pred_direction = np.sign(np.diff(y_pred))
-    # Pourcentage de directions correctes
-    correct = np.sum(true_direction == pred_direction)
-    return float(correct / len(true_direction) * 100)
+from sklearn.metrics import (
+    f1_score, roc_auc_score, precision_score,
+    recall_score, accuracy_score, confusion_matrix,
+)
 
 
 def evaluate_model(
     y_true: np.ndarray,
-    y_pred: np.ndarray,
-    model_name: str = "Model"
-) -> Dict[str, float]:
+    y_prob: np.ndarray,
+    model_name: str = "Model",
+    threshold: float = 0.5,
+) -> Dict:
     """
-    Calcule toutes les métriques d'évaluation et retourne un dictionnaire structuré.
-    
+    Calcule toutes les métriques de classification et retourne un dictionnaire.
+
     Args:
-        y_true: Valeurs réelles (dé-normalisées, en dollars)
-        y_pred: Valeurs prédites (dé-normalisées, en dollars)
-        model_name: Nom du modèle pour l'affichage
-    
+        y_true  : Labels réels (0 ou 1)
+        y_prob  : Probabilités prédites pour la classe 1 (après sigmoid)
+        model_name : Nom du modèle pour l'affichage
+        threshold  : Seuil de décision (défaut 0.5)
+
     Returns:
         Dictionnaire avec toutes les métriques
     """
+    y_pred = (y_prob >= threshold).astype(int)
+
     results = {
-        "model": model_name,
-        "MAE": compute_mae(y_true, y_pred),
-        "RMSE": compute_rmse(y_true, y_pred),
-        "MAPE (%)": compute_mape(y_true, y_pred),
-        "R²": compute_r2(y_true, y_pred),
-        "Direction Accuracy (%)": compute_direction_accuracy(y_true, y_pred),
+        "model":     model_name,
+        "F1":        float(f1_score(y_true, y_pred, zero_division=0)),
+        "Accuracy":  float(accuracy_score(y_true, y_pred)),
+        "AUC-ROC":   float(roc_auc_score(y_true, y_prob)),
+        "Precision": float(precision_score(y_true, y_pred, zero_division=0)),
+        "Recall":    float(recall_score(y_true, y_pred, zero_division=0)),
+        "ConfMatrix": confusion_matrix(y_true, y_pred).tolist(),
     }
     return results
 
 
-def print_evaluation(results: Dict[str, float]):
+def print_evaluation(results: Dict):
     """Affiche les résultats de manière lisible."""
-    print(f"\n{'='*60}")
+    print(f"\n{'='*55}")
     print(f"  Résultats : {results['model']}")
-    print(f"{'='*60}")
-    print(f"  MAE                  : {results['MAE']:,.2f} $")
-    print(f"  RMSE                 : {results['RMSE']:,.2f} $")
-    print(f"  MAPE                 : {results['MAPE (%)']:.2f} %")
-    print(f"  R²                   : {results['R²']:.4f}")
-    print(f"  Direction Accuracy   : {results['Direction Accuracy (%)']:.2f} %")
-    print(f"{'='*60}\n")
+    print(f"{'='*55}")
+    print(f"  F1-score (classe 1)  : {results['F1']:.4f}  ← métrique principale")
+    print(f"  Accuracy             : {results['Accuracy']:.4f}")
+    print(f"  AUC-ROC              : {results['AUC-ROC']:.4f}")
+    print(f"  Precision            : {results['Precision']:.4f}")
+    print(f"  Recall               : {results['Recall']:.4f}")
+    cm = np.array(results["ConfMatrix"])
+    print(f"  Confusion Matrix     :")
+    print(f"    TN={cm[0,0]:>5}  FP={cm[0,1]:>5}")
+    print(f"    FN={cm[1,0]:>5}  TP={cm[1,1]:>5}")
+    print(f"{'='*55}\n")

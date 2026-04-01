@@ -64,7 +64,9 @@ class XGBoostWrapper:
 
         X_flat = self._flatten_sequences(X_train)
 
-        self.model = xgb.XGBRegressor(
+        self.model = xgb.XGBClassifier(
+            objective="binary:logistic",
+            eval_metric="logloss",
             n_estimators=self.config.get("n_estimators", 500),
             max_depth=self.config.get("max_depth", 6),
             learning_rate=self.config.get("learning_rate", 0.05),
@@ -85,8 +87,8 @@ class XGBoostWrapper:
         return self
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """Prédit les valeurs cibles pour les séquences données."""
+        """Retourne les probabilités de la classe 1."""
         if self.model is None:
             raise RuntimeError("Le modèle n'a pas été entraîné.")
         X_flat = self._flatten_sequences(X)
-        return self.model.predict(X_flat)
+        return self.model.predict_proba(X_flat)[:, 1]

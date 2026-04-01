@@ -19,25 +19,16 @@ RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
 # Fenêtre temporelle : combien de jours passés utiliser pour prédire le suivant
 SEQUENCE_LENGTH = 60  # 60 jours de contexte historique
 
-# Ratio de découpe train/validation/test
-TRAIN_RATIO = 0.7
-VAL_RATIO = 0.15
-TEST_RATIO = 0.15
+# Mode classification binaire (label_dir_1d : 0 = baisse, 1 = hausse)
+CLASSIFICATION = True
 
-# Features à utiliser (colonnes du dataset)
-# Ces noms correspondent aux colonnes typiques d'un dataset OHLCV Bitcoin
-FEATURE_COLUMNS = [
-    "Open", "High", "Low", "Close", "Volume",
-    # Indicateurs techniques calculés dans le preprocessing
-    "SMA_7", "SMA_21", "EMA_7", "EMA_21",
-    "RSI_14", "MACD", "MACD_Signal",
-    "BB_Upper", "BB_Lower",
-    "ATR_14", "OBV",
-    "Returns", "Log_Returns", "Volatility_21"
-]
+# Splits temporels fixes (pas de ratio aléatoire — données de séries temporelles)
+TRAIN_END = "2022-12-31"
+VAL_END   = "2023-12-31"
+# Test : tout ce qui est > VAL_END
 
-# Colonne cible à prédire
-TARGET_COLUMN = "Close"
+# Colonne cible
+TARGET_COLUMN = "label_dir_1d"
 
 # ============================================================
 # HYPERPARAMÈTRES COMMUNS
