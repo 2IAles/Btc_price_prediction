@@ -71,16 +71,6 @@ TFT_CONFIG = {
     "dropout": 0.2,
 }
 
-XGBOOST_CONFIG = {
-    "n_estimators": 500,
-    "max_depth": 6,
-    "learning_rate": 0.05,
-    "subsample": 0.8,
-    "colsample_bytree": 0.8,
-    "reg_alpha": 0.1,
-    "reg_lambda": 1.0,
-}
-
 ARIMA_CONFIG = {
     "order": (5, 1, 2),
 }
