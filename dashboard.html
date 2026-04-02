@@ -235,10 +235,8 @@
     <button class="nav-tab" onclick="showTab('pipeline')">Pipeline</button>
     <button class="nav-tab" onclick="showTab('features')">Features</button>
     <button class="nav-tab" onclick="showTab('models')">Models</button>
-    <button class="nav-tab" onclick="showTab('performance')">Performance</button>
     <button class="nav-tab" onclick="showTab('visuals')">Visualizations</button>
     <button class="nav-tab" onclick="showTab('simulator')">Simulator</button>
-    <button class="nav-tab" onclick="showTab('literature')">Literature</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -723,10 +721,8 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       TAB: Performance
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="tab-panel" id="tab-performance">
+  <!-- TAB: Performance removed -->
+  <div class="tab-panel" id="tab-performance" style="display:none!important">
     <div class="section-header">
       <h2>Model Performance</h2>
       <p>Comparative metrics on the held-out test set (≥ 2024-01-01)</p>
@@ -986,10 +982,8 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       TAB: Literature
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="tab-panel" id="tab-literature">
+  <!-- TAB: Literature removed -->
+  <div class="tab-panel" id="tab-literature" style="display:none!important">
     <div class="section-header">
       <h2>Literature Review</h2>
       <p>State of the art for ML/DL Bitcoin price direction prediction (based on project research report)</p>
@@ -1085,121 +1079,12 @@ function showTab(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
-  if (name === 'performance' && !chartsBuilt) buildCharts();
   if (name === 'simulator') runSim();
   if (name === 'features' && !featChartBuilt) buildFeatureChart();
 }
 
-// ─── Data ───────────────────────────────────────────────────────────────────
-const models = ['LSTM','BiLSTM','GRU','CNN-LSTM','Transformer','TFT','XGBoost'];
-// Illustrative values — replace with actual results from 04_results_analysis.ipynb
-const f1Data      = [0.61, 0.62, 0.59, 0.64, 0.57, 0.66, 0.60];
-const accData     = [0.58, 0.59, 0.57, 0.61, 0.55, 0.63, 0.59];
-const aucData     = [0.62, 0.63, 0.60, 0.65, 0.59, 0.67, 0.62];
-const precData    = [0.60, 0.61, 0.58, 0.63, 0.56, 0.65, 0.60];
-const recallData  = [0.62, 0.63, 0.60, 0.65, 0.58, 0.67, 0.61];
-const colors = [
-  '#58a6ff','#79c0ff','#56d364','#f7931a','#d2a8ff','#ffa657','#e3b341'
-];
-const chartDefaults = {
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } },
-    y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' }, min: 0, max: 1 }
-  }
-};
-
-let chartsBuilt = false;
 let featChartBuilt = false;
-let threshChart = null;
 let sigChart = null;
-
-// ─── Performance Charts ──────────────────────────────────────────────────────
-function buildCharts() {
-  chartsBuilt = true;
-
-  // F1 chart
-  new Chart(document.getElementById('f1Chart'), {
-    type: 'bar',
-    data: {
-      labels: models,
-      datasets: [{
-        data: f1Data,
-        backgroundColor: colors.map((c, i) => f1Data[i] === Math.max(...f1Data) ? '#3fb950' : c + '99'),
-        borderColor: colors.map((c, i) => f1Data[i] === Math.max(...f1Data) ? '#3fb950' : c),
-        borderWidth: 2, borderRadius: 6
-      }]
-    },
-    options: { ...chartDefaults, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` F1: ${(ctx.raw*100).toFixed(1)}%` } } } }
-  });
-
-  // Accuracy chart
-  new Chart(document.getElementById('accuracyChart'), {
-    type: 'bar',
-    data: {
-      labels: models,
-      datasets: [{
-        data: accData,
-        backgroundColor: colors.map((c, i) => accData[i] === Math.max(...accData) ? '#3fb950' : c + '99'),
-        borderColor: colors.map((c, i) => accData[i] === Math.max(...accData) ? '#3fb950' : c),
-        borderWidth: 2, borderRadius: 6
-      }]
-    },
-    options: { ...chartDefaults, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` Acc: ${(ctx.raw*100).toFixed(1)}%` } } } }
-  });
-
-  // AUC chart (horizontal bar)
-  new Chart(document.getElementById('aucChart'), {
-    type: 'bar',
-    data: {
-      labels: models,
-      datasets: [{
-        label: 'AUC-ROC',
-        data: aucData,
-        backgroundColor: colors.map((c, i) => aucData[i] === Math.max(...aucData) ? '#3fb95099' : c + '66'),
-        borderColor: colors.map((c, i) => aucData[i] === Math.max(...aucData) ? '#3fb950' : c),
-        borderWidth: 2, borderRadius: 4
-      }]
-    },
-    options: {
-      indexAxis: 'y',
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` AUC: ${ctx.raw.toFixed(3)}` } } },
-      scales: {
-        x: { min: 0.5, max: 0.75, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } },
-        y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } }
-      }
-    }
-  });
-
-  // Metrics table
-  const tbody = document.getElementById('metricsTableBody');
-  const sortedIdx = f1Data.map((v,i) => i).sort((a,b) => f1Data[b] - f1Data[a]);
-  sortedIdx.forEach((i, rank) => {
-    const isBest = rank === 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span style="color:${colors[i]}; font-weight:700;">${models[i]}</span> ${isBest ? '<span class="tag green" style="font-size:10px;">BEST</span>' : ''}</td>
-      <td class="${isBest?'best':''}">${(f1Data[i]*100).toFixed(1)}%
-        <div class="bar-wrap"><div class="bar-fill" style="width:${f1Data[i]*100}%; background:${colors[i]};"></div></div>
-      </td>
-      <td>${(accData[i]*100).toFixed(1)}%</td>
-      <td>${aucData[i].toFixed(3)}</td>
-      <td>${(precData[i]*100).toFixed(1)}%</td>
-      <td>${(recallData[i]*100).toFixed(1)}%</td>
-      <td style="color:var(--muted); font-size:11px;">${i < 6 ? 'PyTorch DL' : 'XGBoost'}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  // CM (illustrative)
-  document.getElementById('cm-tn').textContent = '89';
-  document.getElementById('cm-fp').textContent = '71';
-  document.getElementById('cm-fn').textContent = '65';
-  document.getElementById('cm-tp').textContent = '108';
-
-  // Threshold chart
-  buildThresholdChart(0.5);
-}
 
 // ─── Feature Importance Chart ─────────────────────────────────────────────────
 function buildFeatureChart() {
@@ -1226,51 +1111,6 @@ function buildFeatureChart() {
       }
     }
   });
-}
-
-// ─── Threshold Chart ──────────────────────────────────────────────────────────
-function buildThresholdChart(t) {
-  const thresholds = Array.from({length: 61}, (_, i) => 0.2 + i * 0.01);
-  // Simulate precision/recall curve (logistic-like shape)
-  const precision = thresholds.map(th => Math.min(0.9, 0.4 + th * 0.7 + Math.random() * 0.02));
-  const recall    = thresholds.map(th => Math.max(0.1, 0.95 - th * 0.9 + Math.random() * 0.02));
-  const f1        = precision.map((p, i) => 2*p*recall[i]/(p+recall[i]));
-
-  const ctx = document.getElementById('thresholdChart');
-  if (threshChart) threshChart.destroy();
-  threshChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: thresholds.map(v => v.toFixed(2)),
-      datasets: [
-        { label: 'Precision', data: precision, borderColor: '#f7931a', tension: 0.4, pointRadius: 0, borderWidth: 2 },
-        { label: 'Recall',    data: recall,    borderColor: '#58a6ff', tension: 0.4, pointRadius: 0, borderWidth: 2 },
-        { label: 'F1',        data: f1,        borderColor: '#3fb950', tension: 0.4, pointRadius: 0, borderWidth: 2, borderDash: [4,2] }
-      ]
-    },
-    options: {
-      plugins: { legend: { labels: { color: '#8b949e', font: { size: 11 } } } },
-      scales: {
-        x: { ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: '#21262d' } },
-        y: { min: 0, max: 1, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } }
-      }
-    }
-  });
-  updateThresholdStats(t);
-}
-
-function updateThreshold(val) {
-  document.getElementById('thresholdVal').textContent = parseFloat(val).toFixed(2);
-  updateThresholdStats(parseFloat(val));
-}
-
-function updateThresholdStats(t) {
-  const prec = Math.min(0.92, 0.42 + t * 0.72);
-  const rec  = Math.max(0.10, 0.96 - t * 0.88);
-  const f1   = 2 * prec * rec / (prec + rec);
-  document.getElementById('thresh-precision').querySelector('div:last-child').textContent = (prec*100).toFixed(0) + '%';
-  document.getElementById('thresh-recall').querySelector('div:last-child').textContent    = (rec*100).toFixed(0) + '%';
-  document.getElementById('thresh-f1').querySelector('div:last-child').textContent        = (f1*100).toFixed(0) + '%';
 }
 
 // ─── Simulator ──────────────────────────────────────────────────────────────
@@ -1374,10 +1214,6 @@ function updateSignalChart(contributions) {
 // ─── Init ────────────────────────────────────────────────────────────────────
 buildFeatureChart();
 runSim();
-// Trigger threshold chart when tab opens
-document.querySelector('[onclick="showTab(\'performance\')"]').addEventListener('click', () => {
-  if (!threshChart) setTimeout(() => buildThresholdChart(0.5), 100);
-});
 </script>
 </body>
 </html>
