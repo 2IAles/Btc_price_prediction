@@ -16,59 +16,59 @@ VAL_END = "2023-12-31"
 TARGET_COLUMN = "label_dir_1d"
 
 BATCH_SIZE = 32
-EPOCHS = 100
-LEARNING_RATE = 0.001
-EARLY_STOPPING_PATIENCE = 15
+EPOCHS = 150
+LEARNING_RATE = 0.0003
+EARLY_STOPPING_PATIENCE = 25
 RANDOM_SEED = 42
 
 
 LSTM_CONFIG = {
-    "hidden_size": 128,
-    "num_layers": 2,
-    "dropout": 0.2,
+    "hidden_size": 64,
+    "num_layers": 1,
+    "dropout": 0.3,
     "bidirectional": False,
 }
 
 BILSTM_CONFIG = {
-    "hidden_size": 128,
-    "num_layers": 2,
-    "dropout": 0.2,
+    "hidden_size": 64,
+    "num_layers": 1,
+    "dropout": 0.3,
     "bidirectional": True,
 }
 
 GRU_CONFIG = {
-    "hidden_size": 128,
-    "num_layers": 2,
-    "dropout": 0.2,
+    "hidden_size": 64,
+    "num_layers": 1,
+    "dropout": 0.3,
 }
 
 CNN_LSTM_CONFIG = {
-    "cnn_filters": 64,
+    "cnn_filters": 32,
     "cnn_kernel_size": 3,
-    "lstm_hidden_size": 128,
+    "lstm_hidden_size": 64,
     "lstm_num_layers": 1,
-    "dropout": 0.2,
+    "dropout": 0.3,
 }
 
 TCN_CONFIG = {
-    "num_channels": [64, 64, 64, 64],
+    "num_channels": [32, 32, 32],
     "kernel_size": 3,
-    "dropout": 0.2,
+    "dropout": 0.3,
 }
 
 TRANSFORMER_CONFIG = {
-    "d_model": 128,
-    "nhead": 8,
-    "num_encoder_layers": 3,
-    "dim_feedforward": 256,
-    "dropout": 0.1,
+    "d_model": 64,
+    "nhead": 4,
+    "num_encoder_layers": 2,
+    "dim_feedforward": 128,
+    "dropout": 0.2,
 }
 
 TFT_CONFIG = {
-    "hidden_size": 128,
+    "hidden_size": 64,
     "lstm_layers": 1,
     "attention_heads": 4,
-    "dropout": 0.1,
+    "dropout": 0.2,
 }
 
 XGBOOST_CONFIG = {
