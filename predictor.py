@@ -9,7 +9,7 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-sys.path.insert(0, str(Path(__file__).parent / "modèle llm"))
+sys.path.insert(0, str(Path(__file__).parent))
 
 
 class BTCPredictor:
@@ -67,17 +67,8 @@ class BTCPredictor:
         with open(best_path, "rb") as f:
             saved = pickle.load(f)
 
-        from xgboost_model import XGBoostWrapper
-
-        # Cas XGBoost
-        if isinstance(saved, dict) and "model" in saved:
-            model = saved["model"]
-            meta = saved.get("meta", {})
-            model_name = meta.get("name", "XGBoost")
-            threshold = meta.get("threshold", 0.5)
-
-        # Cas PyTorch :
-        elif isinstance(saved, dict) and "name" in saved:
+        # Cas PyTorch
+        if isinstance(saved, dict) and "name" in saved:
             meta = saved
             model_name = meta["name"]
             threshold = meta.get("threshold", 0.5)
@@ -104,7 +95,7 @@ class BTCPredictor:
     def predict_proba(self, df: pd.DataFrame) -> float:
         seq = self._prepare_sequence(df)
         probs = self._model.predict(seq)
-        return float(probs[-1])
+        return float(np.atleast_1d(probs)[0])
 
     def _prepare_sequence(self, df: pd.DataFrame) -> np.ndarray:
         features = self._extract_features(df)
@@ -124,15 +115,16 @@ class BTCPredictor:
     def _extract_features(self, df: pd.DataFrame) -> pd.DataFrame:
         out = pd.DataFrame(index=df.index)
 
+        # feature_name -> column_name dans le DataFrame d'entrée
         assets = {
-            "btc": "close_btc",
-            "xau": "close_xau",
-            "eth": "close_eth",
-            "snp500": "close_snp500",
-            "dxy": "close_dxy",
-            "vix": "close_vix",
-            "us10y": "close_us10y",
-            "oil": "close_oil",
+            "btc":    "close_btc",
+            "gold":   "close_xau",
+            "eth":    "close_eth",
+            "sp500":  "close_snp500",
+            "dxy":    "close_dxy",
+            "vix":    "close_vix",
+            "us10y":  "close_us10y",
+            "oil":    "close_oil",
             "silver": "close_silver",
         }
 
@@ -146,9 +138,13 @@ class BTCPredictor:
                 out[f"ret_{w}d_{key}"] = np.log(s / s.shift(w)).shift(1)
             for w in [7, 30]:
                 out[f"vol_{w}d_{key}"] = ret.rolling(w).std()
+
+        # Momentum BTC uniquement (close / SMA)
+        if "close_btc" in df.columns:
+            s = df["close_btc"]
             for w in [7, 30]:
                 sma = s.rolling(w).mean()
-                out[f"mom_{w}d_{key}"] = (s / sma).shift(1)
+                out[f"momentum_{w}d_btc"] = (s / sma).shift(1)
 
         if "volume_btc" in df.columns:
             vol = df["volume_btc"]
@@ -177,18 +173,18 @@ class BTCPredictor:
     @staticmethod
     def _load_pytorch_model(model_name: str, n_features: int, models_dir: Path):
         import torch
-        from config import (
+        from scripts_models.config import (
             LSTM_CONFIG,
             GRU_CONFIG,
             CNN_LSTM_CONFIG,
             TRANSFORMER_CONFIG,
             TFT_CONFIG,
         )
-        from trainer import Trainer
+        from scripts_models.trainer import Trainer
 
         name = model_name.lower()
         if name == "lstm":
-            from lstm_model import LSTMModel
+            from scripts_models.lstm_model import LSTMModel
 
             model = LSTMModel(
                 n_features,
@@ -197,7 +193,7 @@ class BTCPredictor:
                 LSTM_CONFIG["dropout"],
             )
         elif name == "bilstm":
-            from lstm_model import LSTMModel
+            from scripts_models.lstm_model import LSTMModel
 
             model = LSTMModel(
                 n_features,
@@ -207,7 +203,7 @@ class BTCPredictor:
                 bidirectional=True,
             )
         elif name == "gru":
-            from gru_model import GRUModel
+            from scripts_models.gru_model import GRUModel
 
             model = GRUModel(
                 n_features,
@@ -216,7 +212,7 @@ class BTCPredictor:
                 GRU_CONFIG["dropout"],
             )
         elif name == "cnn-lstm":
-            from cnn_lstm_model import CNNLSTMModel
+            from scripts_models.cnn_lstm_model import CNNLSTMModel
 
             model = CNNLSTMModel(
                 n_features,
@@ -227,7 +223,7 @@ class BTCPredictor:
                 CNN_LSTM_CONFIG["dropout"],
             )
         elif name == "transformer":
-            from transformer_model import TransformerModel
+            from scripts_models.transformer_model import TransformerModel
 
             model = TransformerModel(
                 n_features,
@@ -238,7 +234,7 @@ class BTCPredictor:
                 TRANSFORMER_CONFIG["dropout"],
             )
         elif name == "tft":
-            from tft_model import SimplifiedTFT
+            from scripts_models.tft_model import SimplifiedTFT
 
             model = SimplifiedTFT(
                 n_features,
