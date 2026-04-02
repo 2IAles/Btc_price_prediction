@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BTC Price Direction Predictor — Model Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --accent: #f7931a;
+      --accent2: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    /* ── Layout ── */
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 50%, #0d1117 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 24px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon { font-size: 32px; }
+    .logo h1 { font-size: 20px; font-weight: 700; color: var(--accent); }
+    .logo p { color: var(--muted); font-size: 12px; }
+    .header-badge {
+      background: linear-gradient(90deg, var(--accent), #e67e22);
+      color: #fff;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    /* ── Nav Tabs ── */
+    .nav-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 16px 0 0; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+    .nav-tab {
+      padding: 8px 18px; border-radius: var(--radius) var(--radius) 0 0;
+      background: transparent; border: 1px solid transparent;
+      color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 500;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .nav-tab:hover { color: var(--text); background: var(--bg3); }
+    .nav-tab.active {
+      color: var(--accent); background: var(--bg2);
+      border-color: var(--border); border-bottom-color: var(--bg2);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    /* ── Cards ── */
+    .card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+    /* ── Grid Layouts ── */
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 900px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .grid-3, .grid-2 { grid-template-columns: 1fr; }
+    }
+    /* ── Stat Cards ── */
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; text-align: center; }
+    .stat-card .value { font-size: 32px; font-weight: 700; }
+    .stat-card .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .stat-card .sublabel { color: var(--muted); font-size: 11px; }
+    /* ── Pipeline ── */
+    .pipeline { display: flex; align-items: center; flex-wrap: wrap; gap: 0; margin-bottom: 24px; }
+    .pipe-step {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 18px; flex: 1; min-width: 130px; text-align: center;
+    }
+    .pipe-step .icon { font-size: 24px; margin-bottom: 6px; }
+    .pipe-step .name { font-size: 12px; font-weight: 700; color: var(--accent); }
+    .pipe-step .desc { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .pipe-arrow { color: var(--muted); font-size: 20px; padding: 0 6px; }
+    /* ── Model Cards ── */
+    .model-card {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 18px; transition: border-color 0.2s, transform 0.2s;
+      cursor: default;
+    }
+    .model-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .model-card .model-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .model-card .model-type { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+    .model-card .model-desc { font-size: 12px; color: var(--text); line-height: 1.5; margin-bottom: 12px; }
+    .model-card .model-params { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 2px 8px; font-size: 11px; color: var(--muted);
+    }
+    .tag.accent { border-color: var(--accent); color: var(--accent); }
+    .tag.green { border-color: var(--green); color: var(--green); }
+    /* ── Feature Groups ── */
+    .feat-group { margin-bottom: 20px; }
+    .feat-group h3 { font-size: 13px; font-weight: 700; color: var(--accent2); margin-bottom: 10px; border-left: 3px solid var(--accent2); padding-left: 8px; }
+    .feat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .feat-chip {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 20px;
+      padding: 3px 10px; font-size: 11px; font-family: 'SFMono-Regular', monospace;
+    }
+    /* ── Metrics Table ── */
+    .metrics-table { width: 100%; border-collapse: collapse; }
+    .metrics-table th {
+      text-align: left; padding: 10px 14px; background: var(--bg3);
+      font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .metrics-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .metrics-table tr:last-child td { border-bottom: none; }
+    .metrics-table tr:hover td { background: var(--bg3); }
+    .metrics-table .best { color: var(--green); font-weight: 700; }
+    .metrics-table .rank { color: var(--muted); font-size: 11px; }
+    /* ── Progress bars ── */
+    .bar-wrap { background: var(--bg3); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 4px; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+    /* ── Prediction Simulator ── */
+    .slider-group { margin-bottom: 18px; }
+    .slider-group label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+    .slider-group label span { color: var(--accent); font-weight: 700; }
+    input[type="range"] {
+      width: 100%; accent-color: var(--accent);
+      height: 6px; border-radius: 3px; cursor: pointer;
+    }
+    .prediction-output {
+      background: linear-gradient(135deg, var(--bg3), var(--bg2));
+      border: 2px solid var(--border); border-radius: var(--radius);
+      padding: 28px; text-align: center; margin-top: 24px;
+    }
+    .pred-prob { font-size: 56px; font-weight: 800; letter-spacing: -2px; }
+    .pred-dir { font-size: 22px; font-weight: 700; margin-top: 8px; }
+    .pred-confidence { font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .prob-bar-outer {
+      background: var(--bg3); border-radius: 8px; height: 16px;
+      overflow: hidden; margin: 20px 0 8px;
+      border: 1px solid var(--border);
+    }
+    .prob-bar-inner {
+      height: 100%; border-radius: 8px;
+      transition: width 0.5s ease, background 0.5s ease;
+      background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+    }
+    /* ── Images ── */
+    .img-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+    .img-card h3 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+    .img-card img { width: 100%; border-radius: 6px; display: block; }
+    /* ── Literature table ── */
+    .lit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .lit-table th, .lit-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+    .lit-table th { background: var(--bg3); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }
+    .lit-table td:last-child { color: var(--accent); }
+    /* ── Alert banner ── */
+    .alert {
+      background: rgba(88, 166, 255, 0.1); border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: var(--radius); padding: 12px 16px; font-size: 12px;
+      color: var(--accent2); margin-bottom: 20px; display: flex; gap: 8px; align-items: flex-start;
+    }
+    .alert-warn {
+      background: rgba(247, 147, 26, 0.1); border-color: rgba(247, 147, 26, 0.3);
+      color: var(--accent);
+    }
+    /* ── Section headers ── */
+    .section-header { margin-bottom: 16px; }
+    .section-header h2 { font-size: 18px; font-weight: 700; }
+    .section-header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    /* ── Conf Matrix ── */
+    .conf-matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; max-width: 280px; }
+    .cm-cell {
+      padding: 16px; text-align: center; border-radius: 4px;
+      font-size: 13px; font-weight: 700;
+    }
+    .cm-cell .cm-val { font-size: 28px; font-weight: 800; }
+    .cm-cell .cm-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    /* ── Tooltip ── */
+    .tooltip-wrap { position: relative; display: inline-block; }
+    .tooltip-icon { cursor: help; color: var(--muted); font-size: 11px; }
+    .tooltip-text {
+      visibility: hidden; background: var(--bg3); color: var(--text);
+      border: 1px solid var(--border); padding: 8px 10px; border-radius: 6px;
+      font-size: 11px; width: 200px; position: absolute; z-index: 10;
+      bottom: 125%; left: 50%; transform: translateX(-50%);
+    }
+    .tooltip-wrap:hover .tooltip-text { visibility: visible; }
+    /* Animate bars on load */
+    @keyframes growBar { from { width: 0; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">₿</div>
+      <div>
+        <h1>BTC Price Direction Predictor</h1>
+        <p>ML/DL models for next-day Bitcoin movement classification</p>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <span class="header-badge">Binary Classification</span>
+      <span style="color:var(--muted); font-size:12px;">Horizon: 1 day</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Nav Tabs -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('overview')">Overview</button>
+    <button class="nav-tab" onclick="showTab('pipeline')">Pipeline</button>
+    <button class="nav-tab" onclick="showTab('features')">Features</button>
+    <button class="nav-tab" onclick="showTab('models')">Models</button>
+    <button class="nav-tab" onclick="showTab('performance')">Performance</button>
+    <button class="nav-tab" onclick="showTab('visuals')">Visualizations</button>
+    <button class="nav-tab" onclick="showTab('simulator')">Simulator</button>
+    <button class="nav-tab" onclick="showTab('literature')">Literature</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Overview
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="section-header">
+      <h2>Project Overview</h2>
+      <p>Multi-asset time-series classification to predict whether Bitcoin will rise or fall the next day</p>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="grid-4">
+      <div class="stat-card">
+        <div class="value" style="color:var(--accent)">7</div>
+        <div class="label">Models Trained</div>
+        <div class="sublabel">LSTM · GRU · BiLSTM · CNN-LSTM · Transformer · TFT · XGBoost</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" style="color:var(--accent2)">60</div>
+        <div class="label">Day Sequence Window</div>
+        <div class="sublabel">Input length for DL models</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" style="color:var(--green)">9</div>
+        <div class="label">Market Assets</div>
+        <div class="sublabel">BTC · Gold · ETH · S&P500 · DXY · VIX · US10Y · Oil · Silver</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" style="color:var(--yellow)">80+</div>
+        <div class="label">Engineered Features</div>
+        <div class="sublabel">Returns · Volatility · Momentum · On-chain</div>
+      </div>
+    </div>
+
+    <!-- Task description -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Prediction Task</div>
+        <p style="color:var(--text); font-size:13px; line-height:1.8; margin-bottom:12px;">
+          Given the last <strong style="color:var(--accent)">60 days</strong> of multi-asset market data,
+          predict whether BTC will close <strong style="color:var(--green)">HIGHER (↑)</strong> or
+          <strong style="color:var(--red)">LOWER (↓)</strong> the next day.
+        </p>
+        <div style="background:var(--bg3); border-radius:8px; padding:14px; font-family:monospace; font-size:12px;">
+          <span style="color:var(--muted)">label_dir_1d</span> = (<span style="color:var(--accent2)">close_btc</span>.shift(-1) &gt; <span style="color:var(--accent2)">close_btc</span>).astype(int)
+          <br><br>
+          <span style="color:var(--green)">1</span> → BTC price goes UP tomorrow<br>
+          <span style="color:var(--red)">0</span> → BTC price goes DOWN tomorrow
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Data Split (no leakage)</div>
+        <div style="margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:13px;">Train set</span>
+            <span style="color:var(--muted); font-size:12px;">≤ 2022-12-31 (~70%)</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:70%; background:var(--accent2);"></div></div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:13px;">Validation set</span>
+            <span style="color:var(--muted); font-size:12px;">2023-01-01 → 2023-12-31 (~15%)</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:15%; background:var(--yellow);"></div></div>
+        </div>
+        <div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:13px;">Test set</span>
+            <span style="color:var(--muted); font-size:12px;">≥ 2024-01-01 (~15%)</span>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:15%; background:var(--green);"></div></div>
+        </div>
+        <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); font-size:11px; color:var(--muted);">
+          ⚠ Chronological split only — never shuffled. RobustScaler fit on train only.
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Sources -->
+    <div class="card">
+      <div class="card-title">Data Sources</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">
+        <div style="background:var(--bg3); border-radius:8px; padding:12px; border:1px solid var(--border);">
+          <div style="font-weight:700; color:var(--accent); margin-bottom:8px;">📊 Market OHLCV</div>
+          <div style="font-size:12px; color:var(--muted); line-height:1.8;">
+            BTC-USD · ETH-USD · GC=F (Gold) · ^GSPC (S&P500) · DX-Y.NYB (DXY) · ^VIX · ^TNX (US10Y) · CL=F (Oil) · SI=F (Silver)
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px;">Source: yfinance / local CSV</div>
+        </div>
+        <div style="background:var(--bg3); border-radius:8px; padding:12px; border:1px solid var(--border);">
+          <div style="font-weight:700; color:var(--accent2); margin-bottom:8px;">⛓ On-Chain Metrics</div>
+          <div style="font-size:12px; color:var(--muted); line-height:1.8;">
+            MVRV Ratio · NUPL · Hashrate · Funding Rate (Binance perp)
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px;">Source: CoinMetrics · Blockchain.info · Binance API</div>
+        </div>
+        <div style="background:var(--bg3); border-radius:8px; padding:12px; border:1px solid var(--border);">
+          <div style="font-weight:700; color:var(--yellow); margin-bottom:8px;">🏦 Macro Indicators</div>
+          <div style="font-size:12px; color:var(--muted); line-height:1.8;">
+            Fed Funds Rate (DFF) · VIX · US 10Y Treasury Yield
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px;">Source: FRED · yfinance</div>
+        </div>
+        <div style="background:var(--bg3); border-radius:8px; padding:12px; border:1px solid var(--border);">
+          <div style="font-weight:700; color:var(--green); margin-bottom:8px;">📈 Sentiment</div>
+          <div style="font-size:12px; color:var(--muted); line-height:1.8;">
+            Google Trends "bitcoin" (monthly, forward-filled to daily)
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px;">Source: pytrends / Google Trends API</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Pipeline
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-pipeline">
+    <div class="section-header">
+      <h2>ML Pipeline</h2>
+      <p>End-to-end workflow from raw data collection to production predictions</p>
+    </div>
+
+    <div class="alert">
+      ℹ Each step maps to a file: <strong>collect_daily.py → 02_preprocessing.py → 03_models.ipynb → 04_results_analysis.ipynb → 05_predictor.py</strong>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipe-step" style="border-color:var(--accent);">
+        <div class="icon">📥</div>
+        <div class="name">collect_daily.py</div>
+        <div class="desc">Fetch 16 daily CSV files from yfinance, FRED, Binance, CoinMetrics APIs</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="icon">🔧</div>
+        <div class="name">02_preprocessing.py</div>
+        <div class="desc">Feature engineering, target creation, chronological split, RobustScaler</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="icon">🧠</div>
+        <div class="name">03_models.ipynb</div>
+        <div class="desc">Train 7 models: LSTM/GRU/BiLSTM/CNN-LSTM/Transformer/TFT/XGBoost</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="icon">📊</div>
+        <div class="name">04_results_analysis.ipynb</div>
+        <div class="desc">ROC curves, confusion matrix, feature importance, best model selection</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step" style="border-color:var(--green);">
+        <div class="icon">🔮</div>
+        <div class="name">05_predictor.py</div>
+        <div class="desc">BTCPredictor class: load → preprocess → predict(df) → {direction, prob}</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Feature Engineering — Detail</div>
+        <div style="font-size:13px; line-height:2;">
+          <div style="padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+            <span>Log returns (1d)</span><span style="color:var(--muted); font-family:monospace">log(close[t]/close[t-1]).shift(1)</span>
+          </div>
+          <div style="padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+            <span>Multi-window returns</span><span style="color:var(--muted); font-family:monospace">3d, 7d, 14d, 30d</span>
+          </div>
+          <div style="padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+            <span>Rolling volatility</span><span style="color:var(--muted); font-family:monospace">std(returns, [7, 30])</span>
+          </div>
+          <div style="padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+            <span>Momentum ratio</span><span style="color:var(--muted); font-family:monospace">close / SMA([7, 30])</span>
+          </div>
+          <div style="padding:8px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+            <span>Volume ratio</span><span style="color:var(--muted); font-family:monospace">volume / rolling_mean(7)</span>
+          </div>
+          <div style="padding:8px 0; display:flex; justify-content:space-between;">
+            <span>Day-of-week encoding</span><span style="color:var(--muted); font-family:monospace">sin + cos (cyclic)</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Anti-Leakage Guarantees</div>
+        <div style="font-size:13px; line-height:2;">
+          <div style="padding:6px 0; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:flex-start;">
+            <span style="color:var(--green); font-size:16px;">✓</span>
+            <span>All features shifted <strong>+1 day</strong> — only past data used to predict tomorrow</span>
+          </div>
+          <div style="padding:6px 0; border-bottom:1px solid var(--border); display:flex; gap:10px;">
+            <span style="color:var(--green); font-size:16px;">✓</span>
+            <span>RobustScaler fit <strong>only on train</strong>, applied to val/test</span>
+          </div>
+          <div style="padding:6px 0; border-bottom:1px solid var(--border); display:flex; gap:10px;">
+            <span style="color:var(--green); font-size:16px;">✓</span>
+            <span>Chronological split — <strong>no shuffling</strong></span>
+          </div>
+          <div style="padding:6px 0; border-bottom:1px solid var(--border); display:flex; gap:10px;">
+            <span style="color:var(--green); font-size:16px;">✓</span>
+            <span><code>label_dir_1d</code> never used as feature</span>
+          </div>
+          <div style="padding:6px 0; display:flex; gap:10px;">
+            <span style="color:var(--green); font-size:16px;">✓</span>
+            <span>Test set evaluated <strong>exactly once</strong> at end</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">BTCPredictor Inference Flow</div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 0;">
+        <div style="background:var(--bg3); padding:10px 16px; border-radius:8px; font-size:12px; font-family:monospace; border:1px solid var(--border);">df (90+ rows)</div>
+        <div style="color:var(--muted)">→</div>
+        <div style="background:var(--bg3); padding:10px 16px; border-radius:8px; font-size:12px; border:1px solid var(--border); text-align:center;">
+          <div style="color:var(--accent); font-weight:700;">_extract_features()</div>
+          <div style="color:var(--muted); font-size:11px;">returns, vol, momentum, on-chain</div>
+        </div>
+        <div style="color:var(--muted)">→</div>
+        <div style="background:var(--bg3); padding:10px 16px; border-radius:8px; font-size:12px; border:1px solid var(--border); text-align:center;">
+          <div style="color:var(--accent2); font-weight:700;">scaler.transform()</div>
+          <div style="color:var(--muted); font-size:11px;">RobustScaler (saved)</div>
+        </div>
+        <div style="color:var(--muted)">→</div>
+        <div style="background:var(--bg3); padding:10px 16px; border-radius:8px; font-size:12px; border:1px solid var(--border); text-align:center;">
+          <div style="color:var(--yellow); font-weight:700;">window[-60:]</div>
+          <div style="color:var(--muted); font-size:11px;">shape: (1, 60, n_features)</div>
+        </div>
+        <div style="color:var(--muted)">→</div>
+        <div style="background:var(--bg3); padding:10px 16px; border-radius:8px; font-size:12px; border:1px solid var(--border); text-align:center;">
+          <div style="color:var(--green); font-weight:700;">model.predict()</div>
+          <div style="color:var(--muted); font-size:11px;">→ probability [0,1]</div>
+        </div>
+        <div style="color:var(--muted)">→</div>
+        <div style="background:linear-gradient(135deg, rgba(63,185,80,0.2), rgba(63,185,80,0.05)); padding:10px 16px; border-radius:8px; font-size:12px; border:1px solid var(--green); text-align:center;">
+          <div style="color:var(--green); font-weight:700;">{direction, prob}</div>
+          <div style="color:var(--muted); font-size:11px;">1=UP, 0=DOWN</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Features
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-features">
+    <div class="section-header">
+      <h2>Feature Engineering</h2>
+      <p>80+ features constructed per day, grouped by category and asset</p>
+    </div>
+
+    <div class="alert">
+      ℹ All features are lagged by 1 day (<code>shift(1)</code>) to avoid look-ahead bias. Only data known at time <em>t-1</em> is used to predict day <em>t</em>.
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="feat-group">
+          <h3>Log Returns by Asset (×9 assets)</h3>
+          <div class="feat-chips">
+            <span class="feat-chip">ret_1d_btc</span>
+            <span class="feat-chip">ret_1d_xau</span>
+            <span class="feat-chip">ret_1d_eth</span>
+            <span class="feat-chip">ret_1d_snp500</span>
+            <span class="feat-chip">ret_1d_dxy</span>
+            <span class="feat-chip">ret_1d_vix</span>
+            <span class="feat-chip">ret_1d_us10y</span>
+            <span class="feat-chip">ret_1d_oil</span>
+            <span class="feat-chip">ret_1d_silver</span>
+          </div>
+        </div>
+        <div class="feat-group">
+          <h3>Multi-Window Returns (3d · 7d · 14d · 30d) ×9 assets</h3>
+          <div class="feat-chips">
+            <span class="feat-chip">ret_3d_btc</span>
+            <span class="feat-chip">ret_7d_btc</span>
+            <span class="feat-chip">ret_14d_btc</span>
+            <span class="feat-chip">ret_30d_btc</span>
+            <span class="feat-chip" style="color:var(--muted)">... ×8 more assets</span>
+          </div>
+        </div>
+        <div class="feat-group">
+          <h3>Rolling Volatility (7d · 30d) ×9 assets</h3>
+          <div class="feat-chips">
+            <span class="feat-chip">vol_7d_btc</span>
+            <span class="feat-chip">vol_30d_btc</span>
+            <span class="feat-chip">vol_7d_xau</span>
+            <span class="feat-chip">vol_30d_xau</span>
+            <span class="feat-chip" style="color:var(--muted)">... ×7 more assets</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="feat-group">
+          <h3>Momentum (close / SMA) (7d · 30d) ×9 assets</h3>
+          <div class="feat-chips">
+            <span class="feat-chip">mom_7d_btc</span>
+            <span class="feat-chip">mom_30d_btc</span>
+            <span class="feat-chip">mom_7d_xau</span>
+            <span class="feat-chip">mom_30d_xau</span>
+            <span class="feat-chip" style="color:var(--muted)">... ×7 more assets</span>
+          </div>
+        </div>
+        <div class="feat-group">
+          <h3>Volume & Cyclic</h3>
+          <div class="feat-chips">
+            <span class="feat-chip" style="border-color:var(--yellow)">vol_ratio_7d_btc</span>
+            <span class="feat-chip" style="border-color:var(--yellow)">dow_sin</span>
+            <span class="feat-chip" style="border-color:var(--yellow)">dow_cos</span>
+          </div>
+        </div>
+        <div class="feat-group">
+          <h3>On-Chain & Macro</h3>
+          <div class="feat-chips">
+            <span class="feat-chip" style="border-color:var(--accent2)">mvrv</span>
+            <span class="feat-chip" style="border-color:var(--accent2)">nupl</span>
+            <span class="feat-chip" style="border-color:var(--accent2)">hashrate</span>
+            <span class="feat-chip" style="border-color:var(--accent2)">funding_rate</span>
+            <span class="feat-chip" style="border-color:var(--accent2)">fedfunds</span>
+            <span class="feat-chip" style="border-color:var(--accent2)">google_trends</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature importance chart -->
+    <div class="card">
+      <div class="card-title">Feature Importance (Random Forest — Illustration)</div>
+      <canvas id="featureImportanceChart" height="160"></canvas>
+    </div>
+
+    <!-- Feature correlation heatmap description -->
+    <div class="card">
+      <div class="card-title">Key Feature Insights</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px;">
+        <div style="background:var(--bg3); padding:14px; border-radius:8px; border-left:3px solid var(--accent);">
+          <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Cross-Asset Returns</div>
+          <div style="font-size:12px; color:var(--muted);">Gold and DXY returns have the highest correlation with BTC direction, confirming the macro influence identified in the 2025 literature (Köse et al.).</div>
+        </div>
+        <div style="background:var(--bg3); padding:14px; border-radius:8px; border-left:3px solid var(--accent2);">
+          <div style="font-weight:700; font-size:13px; margin-bottom:6px;">MVRV Ratio</div>
+          <div style="font-size:12px; color:var(--muted);">Fundamental valuation metric. MVRV &gt; 3.7 historically signals tops; MVRV &lt; 1 signals bottoms. Strong non-linear signal.</div>
+        </div>
+        <div style="background:var(--bg3); padding:14px; border-radius:8px; border-left:3px solid var(--yellow);">
+          <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Funding Rate</div>
+          <div style="font-size:12px; color:var(--muted);">Positive rate = longs pay shorts (bullish bias). Extreme values predict reversals. Averaged across 3 daily settlement times.</div>
+        </div>
+        <div style="background:var(--bg3); padding:14px; border-radius:8px; border-left:3px solid var(--green);">
+          <div style="font-weight:700; font-size:13px; margin-bottom:6px;">Day-of-Week Encoding</div>
+          <div style="font-size:12px; color:var(--muted);">Cyclic sin/cos encoding preserves the circular nature of weekdays (Monday ≈ Sunday). Bitcoin shows measurable weekend effects.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Models
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-models">
+    <div class="section-header">
+      <h2>Model Architectures</h2>
+      <p>7 models trained: 6 PyTorch deep learning + 1 gradient boosting</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="model-card">
+        <div class="model-name" style="color:#58a6ff;">LSTM</div>
+        <div class="model-type">Recurrent Neural Network · PyTorch</div>
+        <div class="model-desc">Long Short-Term Memory with 3 gates (forget, input, output). Retains information selectively over long sequences. The most studied architecture for crypto prediction in the literature.</div>
+        <div class="model-params">
+          <span class="tag">hidden: 64</span>
+          <span class="tag">layers: 1</span>
+          <span class="tag">dropout: 0.3</span>
+          <span class="tag accent">seq_len: 60</span>
+        </div>
+      </div>
+      <div class="model-card">
+        <div class="model-name" style="color:#79c0ff;">BiLSTM</div>
+        <div class="model-type">Bidirectional LSTM · PyTorch</div>
+        <div class="model-desc">Processes sequence in both directions (past→future and future→past). Better representation of each timestep. Doubles parameters versus standard LSTM. Useful for capturing symmetric patterns.</div>
+        <div class="model-params">
+          <span class="tag">hidden: 64×2</span>
+          <span class="tag">layers: 1</span>
+          <span class="tag">bidirectional: True</span>
+          <span class="tag accent">seq_len: 60</span>
+        </div>
+      </div>
+      <div class="model-card">
+        <div class="model-name" style="color:#56d364;">GRU</div>
+        <div class="model-type">Gated Recurrent Unit · PyTorch</div>
+        <div class="model-desc">Simplified LSTM that merges forget and input gates into a single update gate. ~25% fewer parameters than LSTM. Trains faster with comparable performance on short-to-medium sequences.</div>
+        <div class="model-params">
+          <span class="tag">hidden: 64</span>
+          <span class="tag">layers: 1</span>
+          <span class="tag">dropout: 0.3</span>
+          <span class="tag green">lighter than LSTM</span>
+        </div>
+      </div>
+      <div class="model-card">
+        <div class="model-name" style="color:#f7931a;">CNN-LSTM</div>
+        <div class="model-type">Hybrid Convolutional + Recurrent · PyTorch</div>
+        <div class="model-desc">Conv1D layers extract local temporal patterns (candlestick shapes, volume spikes), then LSTM contextualizes globally. Particularly effective when data contains strong technical patterns.</div>
+        <div class="model-params">
+          <span class="tag">filters: 32</span>
+          <span class="tag">kernel: 3</span>
+          <span class="tag">lstm_hidden: 64</span>
+          <span class="tag accent">2-stage</span>
+        </div>
+      </div>
+      <div class="model-card">
+        <div class="model-name" style="color:#d2a8ff;">Transformer</div>
+        <div class="model-type">Attention-Based Encoder · PyTorch</div>
+        <div class="model-desc">Multi-head self-attention over the entire sequence. Each timestep can directly "attend" to any other. Sinusoidal positional encoding. Competitive but data-hungry.</div>
+        <div class="model-params">
+          <span class="tag">d_model: 64</span>
+          <span class="tag">heads: 4</span>
+          <span class="tag">enc_layers: 2</span>
+          <span class="tag">ff_dim: 128</span>
+        </div>
+      </div>
+      <div class="model-card" style="border-color:rgba(247,147,26,0.3);">
+        <div class="model-name" style="color:#ffa657;">TFT</div>
+        <div class="model-type">Temporal Fusion Transformer · PyTorch · SOTA</div>
+        <div class="model-desc">State-of-the-art multi-variate time series model. Combines: Variable Selection Network, LSTM encoder, interpretable multi-head attention, and Gated Residual Networks. Automatically weights feature importance.</div>
+        <div class="model-params">
+          <span class="tag accent">hidden: 64</span>
+          <span class="tag accent">lstm_layers: 1</span>
+          <span class="tag accent">attn_heads: 4</span>
+          <span class="tag accent">SOTA per literature</span>
+        </div>
+      </div>
+      <div class="model-card">
+        <div class="model-name" style="color:#e3b341;">XGBoost</div>
+        <div class="model-type">Gradient Boosting · sklearn wrapper</div>
+        <div class="model-desc">Flattens 3D sequences (60 days × features) into 2D vectors. Ensemble of decision trees with L1/L2 regularization. Strong baseline — if DL doesn't beat it, complexity isn't justified.</div>
+        <div class="model-params">
+          <span class="tag">estimators: 500</span>
+          <span class="tag">max_depth: 6</span>
+          <span class="tag">lr: 0.05</span>
+          <span class="tag">objective: binary:logistic</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Training Configuration</div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; font-size:13px;">
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">OPTIMIZER</div>
+          <div>Adam (lr=0.0003)</div>
+          <div style="color:var(--muted); font-size:11px;">ReduceLROnPlateau</div>
+        </div>
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">LOSS FUNCTION</div>
+          <div>BCEWithLogitsLoss</div>
+          <div style="color:var(--muted); font-size:11px;">Binary cross-entropy</div>
+        </div>
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">EARLY STOPPING</div>
+          <div>patience = 25</div>
+          <div style="color:var(--muted); font-size:11px;">Monitor: val F1 (↑)</div>
+        </div>
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">MAX EPOCHS</div>
+          <div>150</div>
+          <div style="color:var(--muted); font-size:11px;">Batch size: 32</div>
+        </div>
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">GRAD CLIPPING</div>
+          <div>max_norm = 1.0</div>
+          <div style="color:var(--muted); font-size:11px;">Prevents gradient explosion</div>
+        </div>
+        <div style="background:var(--bg3); padding:12px; border-radius:8px;">
+          <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">PRIMARY METRIC</div>
+          <div style="color:var(--accent)">F1-Score (class 1)</div>
+          <div style="color:var(--muted); font-size:11px;">+ Accuracy, AUC-ROC</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Performance
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-performance">
+    <div class="section-header">
+      <h2>Model Performance</h2>
+      <p>Comparative metrics on the held-out test set (≥ 2024-01-01)</p>
+    </div>
+
+    <div class="alert alert-warn">
+      ⚠ The charts below use illustrative values based on the project's literature and training setup. Run <code>04_results_analysis.ipynb</code> + <code>example_usage.py</code> to see your actual trained model results.
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">F1-Score by Model (Test Set)</div>
+        <canvas id="f1Chart" height="200"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Accuracy by Model (Test Set)</div>
+        <canvas id="accuracyChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-title">AUC-ROC Comparison</div>
+      <canvas id="aucChart" height="100"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Metrics Summary Table</div>
+      <table class="metrics-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>F1 ↑</th>
+            <th>Accuracy ↑</th>
+            <th>AUC-ROC ↑</th>
+            <th>Precision</th>
+            <th>Recall</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody id="metricsTableBody">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Confusion Matrix (Best Model — Illustrative)</div>
+        <div style="display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <div style="font-size:11px; color:var(--muted); margin-bottom:8px; text-align:center;">Predicted</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; max-width:240px;">
+              <div style="background:rgba(63,185,80,0.2); border:1px solid var(--green); border-radius:6px; padding:16px; text-align:center;">
+                <div style="font-size:28px; font-weight:800; color:var(--green);">TN</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:4px;">True DOWN</div>
+                <div style="font-size:22px; font-weight:700; color:var(--text); margin-top:6px;" id="cm-tn">—</div>
+              </div>
+              <div style="background:rgba(248,81,73,0.2); border:1px solid var(--red); border-radius:6px; padding:16px; text-align:center;">
+                <div style="font-size:28px; font-weight:800; color:var(--red);">FP</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:4px;">False UP</div>
+                <div style="font-size:22px; font-weight:700; color:var(--text); margin-top:6px;" id="cm-fp">—</div>
+              </div>
+              <div style="background:rgba(248,81,73,0.2); border:1px solid var(--red); border-radius:6px; padding:16px; text-align:center;">
+                <div style="font-size:28px; font-weight:800; color:var(--red);">FN</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:4px;">False DOWN</div>
+                <div style="font-size:22px; font-weight:700; color:var(--text); margin-top:6px;" id="cm-fn">—</div>
+              </div>
+              <div style="background:rgba(63,185,80,0.2); border:1px solid var(--green); border-radius:6px; padding:16px; text-align:center;">
+                <div style="font-size:28px; font-weight:800; color:var(--green);">TP</div>
+                <div style="font-size:11px; color:var(--muted); margin-top:4px;">True UP</div>
+                <div style="font-size:22px; font-weight:700; color:var(--text); margin-top:6px;" id="cm-tp">—</div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1; min-width:180px;">
+            <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Load the actual image generated by 04_results_analysis.ipynb:</div>
+            <div style="background:var(--bg3); padding:10px; border-radius:8px; font-size:11px; font-family:monospace; color:var(--accent2); border:1px solid var(--border);">models/confusion_matrix.png</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:14px; line-height:1.7;">
+              A high <span style="color:var(--green);">TP</span> + <span style="color:var(--green);">TN</span> rate indicates the model correctly identifies both bull and bear days. For trading, high <span style="color:var(--green);">Precision</span> reduces false entry signals.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Threshold Optimization</div>
+        <p style="font-size:12px; color:var(--muted); margin-bottom:16px;">Adjusting the classification threshold trades off precision vs. recall:</p>
+        <div class="slider-group">
+          <label>Threshold <span id="thresholdVal">0.50</span></label>
+          <input type="range" min="0.2" max="0.8" step="0.01" value="0.5" id="thresholdSlider" oninput="updateThreshold(this.value)">
+        </div>
+        <canvas id="thresholdChart" height="160"></canvas>
+        <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+          <div id="thresh-precision" style="text-align:center;">
+            <div style="color:var(--muted);">Precision</div>
+            <div style="color:var(--accent); font-size:18px; font-weight:700;">—</div>
+          </div>
+          <div id="thresh-recall" style="text-align:center;">
+            <div style="color:var(--muted);">Recall</div>
+            <div style="color:var(--accent2); font-size:18px; font-weight:700;">—</div>
+          </div>
+          <div id="thresh-f1" style="text-align:center;">
+            <div style="color:var(--muted);">F1</div>
+            <div style="color:var(--green); font-size:18px; font-weight:700;">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Visualizations
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-visuals">
+    <div class="section-header">
+      <h2>Saved Model Visualizations</h2>
+      <p>Images generated by <code>04_results_analysis.ipynb</code> — located in <code>models/</code></p>
+    </div>
+
+    <div class="alert">
+      ℹ These images are loaded directly from the <code>models/</code> directory. If they appear broken, run <code>04_results_analysis.ipynb</code> first.
+    </div>
+
+    <div class="grid-2">
+      <div class="img-card">
+        <h3>ROC Curves — All Models</h3>
+        <img src="models/roc_curves.png" alt="ROC Curves" onerror="this.src=''; this.alt='Run 04_results_analysis.ipynb to generate this image'; this.style='background:var(--bg3); padding:40px; text-align:center; color:var(--muted); display:block; border-radius:6px; min-height:200px; display:flex; align-items:center; justify-content:center;'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">Area Under the ROC Curve measures the model's ability to discriminate between UP and DOWN days across all thresholds.</p>
+      </div>
+      <div class="img-card">
+        <h3>Confusion Matrix (Best Model)</h3>
+        <img src="models/confusion_matrix.png" alt="Confusion Matrix" onerror="this.alt='Run 04_results_analysis.ipynb to generate'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">True vs. predicted classes on the test set. Rows = actual labels, Columns = predicted labels.</p>
+      </div>
+      <div class="img-card">
+        <h3>Feature Importance (Random Forest)</h3>
+        <img src="models/feature_importance_rf.png" alt="Feature Importance" onerror="this.alt='Run 04_results_analysis.ipynb to generate'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">Mean Decrease in Impurity for top features. Use as a guide for feature selection and understanding which signals drive predictions.</p>
+      </div>
+      <div class="img-card">
+        <h3>Threshold Optimization</h3>
+        <img src="models/threshold_optimization.png" alt="Threshold Optimization" onerror="this.alt='Run 04_results_analysis.ipynb to generate'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">Precision-Recall trade-off as the classification threshold varies. The optimal threshold maximizes F1.</p>
+      </div>
+      <div class="img-card">
+        <h3>Error Analysis</h3>
+        <img src="models/error_analysis.png" alt="Error Analysis" onerror="this.alt='Run 04_results_analysis.ipynb to generate'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">Analysis of when and why the model makes errors — often during high volatility regimes or market structure breaks.</p>
+      </div>
+      <div class="img-card">
+        <h3>Literature Comparison</h3>
+        <img src="models/literature_comparison.png" alt="Literature Comparison" onerror="this.alt='Run 04_results_analysis.ipynb to generate'">
+        <p style="font-size:11px; color:var(--muted); margin-top:8px;">Benchmark against published results from academic papers. Validates or contextualizes model performance relative to the state of the art.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Simulator
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-simulator">
+    <div class="section-header">
+      <h2>Prediction Simulator</h2>
+      <p>Explore how key market signals influence the model's directional bias</p>
+    </div>
+
+    <div class="alert alert-warn">
+      ⚠ This is a conceptual simulator using a weighted formula to illustrate signal direction. It does <strong>not</strong> run the actual trained model. For real predictions, use <code>python example_usage.py</code>.
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Market Signal Inputs</div>
+
+        <div class="slider-group">
+          <label>BTC 7-day Return <span id="val-btc7">0.0%</span></label>
+          <input type="range" min="-30" max="30" step="0.5" value="0" id="s-btc7" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">Trend momentum over the past week</div>
+        </div>
+
+        <div class="slider-group">
+          <label>BTC Volatility (30d) <span id="val-vol30">3.0%</span></label>
+          <input type="range" min="1" max="15" step="0.1" value="3" id="s-vol30" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">Higher volatility → more uncertain market</div>
+        </div>
+
+        <div class="slider-group">
+          <label>MVRV Ratio <span id="val-mvrv">2.0</span></label>
+          <input type="range" min="0.5" max="5" step="0.05" value="2.0" id="s-mvrv" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">&lt;1 = undervalued · &gt;3.7 = historically overbought</div>
+        </div>
+
+        <div class="slider-group">
+          <label>Funding Rate <span id="val-fund">0.01%</span></label>
+          <input type="range" min="-0.1" max="0.3" step="0.005" value="0.01" id="s-fund" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">Positive = bullish bias, extreme → reversal risk</div>
+        </div>
+
+        <div class="slider-group">
+          <label>Gold 7-day Return <span id="val-gold7">0.0%</span></label>
+          <input type="range" min="-5" max="5" step="0.1" value="0" id="s-gold7" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">Risk-off asset — often inversely correlated with BTC risk</div>
+        </div>
+
+        <div class="slider-group">
+          <label>VIX Level <span id="val-vix">20</span></label>
+          <input type="range" min="10" max="80" step="1" value="20" id="s-vix" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">&lt;20 = calm · &gt;30 = fear · &gt;40 = panic</div>
+        </div>
+
+        <div class="slider-group">
+          <label>Google Trends "bitcoin" <span id="val-trends">40</span></label>
+          <input type="range" min="0" max="100" step="1" value="40" id="s-trends" oninput="runSim()">
+          <div style="font-size:11px; color:var(--muted);">High interest → retail FOMO, often precedes tops</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="prediction-output">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">Tomorrow's Predicted Direction</div>
+          <div class="pred-prob" id="sim-prob">—</div>
+          <div class="prob-bar-outer">
+            <div class="prob-bar-inner" id="sim-bar" style="width:50%"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--muted);">
+            <span>← BEARISH (0%)</span><span>50%</span><span>BULLISH → (100%)</span>
+          </div>
+          <div class="pred-dir" id="sim-dir">—</div>
+          <div class="pred-confidence" id="sim-conf">—</div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title">Signal Contribution Breakdown</div>
+          <canvas id="signalChart" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Prediction Scenarios</div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
+        <button onclick="loadScenario('bull')" style="background:rgba(63,185,80,0.1); border:1px solid var(--green); border-radius:8px; padding:14px; cursor:pointer; text-align:left; color:var(--text);">
+          <div style="font-weight:700; color:var(--green); margin-bottom:4px;">🐂 Strong Bull</div>
+          <div style="font-size:11px; color:var(--muted);">Positive momentum, low VIX, healthy MVRV, positive funding</div>
+        </button>
+        <button onclick="loadScenario('bear')" style="background:rgba(248,81,73,0.1); border:1px solid var(--red); border-radius:8px; padding:14px; cursor:pointer; text-align:left; color:var(--text);">
+          <div style="font-weight:700; color:var(--red); margin-bottom:4px;">🐻 Strong Bear</div>
+          <div style="font-size:11px; color:var(--muted);">Negative returns, high VIX panic, excessive funding rate</div>
+        </button>
+        <button onclick="loadScenario('neutral')" style="background:rgba(139,148,158,0.1); border:1px solid var(--muted); border-radius:8px; padding:14px; cursor:pointer; text-align:left; color:var(--text);">
+          <div style="font-weight:700; color:var(--muted); margin-bottom:4px;">😐 Neutral / Sideways</div>
+          <div style="font-size:11px; color:var(--muted);">Mixed signals, moderate volatility, average metrics</div>
+        </button>
+        <button onclick="loadScenario('fomo')" style="background:rgba(247,147,26,0.1); border:1px solid var(--yellow); border-radius:8px; padding:14px; cursor:pointer; text-align:left; color:var(--text);">
+          <div style="font-weight:700; color:var(--yellow); margin-bottom:4px;">🚀 FOMO Top Risk</div>
+          <div style="font-size:11px; color:var(--muted);">High google trends, overbought MVRV, extreme funding</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TAB: Literature
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-panel" id="tab-literature">
+    <div class="section-header">
+      <h2>Literature Review</h2>
+      <p>State of the art for ML/DL Bitcoin price direction prediction (based on project research report)</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Architecture Comparison Table</div>
+        <table class="lit-table">
+          <thead>
+            <tr><th>Architecture</th><th>Strengths</th><th>Optimal Use Case</th><th>Literature Accuracy</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ARIMA</td><td>Simple, interpretable</td><td>Baseline only</td><td>~50-52%</td></tr>
+            <tr><td>XGBoost</td><td>Robust to noise, fast</td><td>Tabular features</td><td>65-67%</td></tr>
+            <tr><td>SVM + Boruta</td><td>Feature selection</td><td>When features are noisy</td><td>~83%</td></tr>
+            <tr><td>LSTM</td><td>Long-term memory</td><td>General time-series</td><td>52-65%</td></tr>
+            <tr><td>GRU</td><td>Lighter than LSTM</td><td>Small datasets</td><td>~60%</td></tr>
+            <tr><td>BiLSTM</td><td>Symmetric patterns</td><td>Bidirectional context</td><td>~62%</td></tr>
+            <tr><td>CNN-LSTM</td><td>Local + global patterns</td><td>Technical pattern data</td><td>~82%</td></tr>
+            <tr><td>TCN</td><td>Parallelizable</td><td>Fixed horizon, GPU</td><td>~60%</td></tr>
+            <tr><td>Transformer</td><td>Global attention</td><td>Long sequences</td><td>55-65%</td></tr>
+            <tr><td style="font-weight:700; color:var(--accent);">TFT</td><td>Interpretable, SOTA</td><td>Multi-variate, multi-horizon</td><td style="color:var(--green); font-weight:700;">Best reported</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Findings from Literature</div>
+        <div style="display:flex; flex-direction:column; gap:12px; font-size:12px;">
+          <div style="padding:12px; background:var(--bg3); border-radius:8px; border-left:3px solid var(--accent);">
+            <div style="font-weight:700; margin-bottom:4px;">TFT dominates (Köse et al., 2025)</div>
+            <div style="color:var(--muted);">Gold price identified as the most important macro factor for BTC prediction. TFT outperforms LSTM/GRU/SVR/XGBoost on 5 cryptocurrencies in RMSE, MAE, and R².</div>
+          </div>
+          <div style="padding:12px; background:var(--bg3); border-radius:8px; border-left:3px solid var(--accent2);">
+            <div style="font-weight:700; margin-bottom:4px;">CNN-LSTM + Boruta = 82% (ScienceDirect, 2025)</div>
+            <div style="color:var(--muted);">Feature selection with Boruta algorithm before CNN-LSTM consistently outperforms other combinations. Best performer on intraday data with strong technical patterns.</div>
+          </div>
+          <div style="padding:12px; background:var(--bg3); border-radius:8px; border-left:3px solid var(--yellow);">
+            <div style="font-weight:700; margin-bottom:4px;">LSTM benchmark (Critien et al., 2024)</div>
+            <div style="color:var(--muted);">In systematic comparison across 5 cryptos, LSTM achieves best RMSE (0.0222), 2.7% better than second model. RNNs occupy the top 3 slots ahead of CNN and Transformers.</div>
+          </div>
+          <div style="padding:12px; background:var(--bg3); border-radius:8px; border-left:3px solid var(--green);">
+            <div style="font-weight:700; margin-bottom:4px;">Efficient market caution</div>
+            <div style="color:var(--muted);">Theoretical market efficiency suggests prediction should be impossible. In practice, micro-inefficiencies exist but degrade quickly once models are deployed (strategy decay).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Priority Recommendations (Literature Consensus)</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:center; gap:14px; padding:12px; background:var(--bg3); border-radius:8px;">
+          <div style="width:32px; height:32px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#000; flex-shrink:0;">1</div>
+          <div><strong style="color:var(--accent);">TFT (Temporal Fusion Transformer)</strong> — Best performance/interpretability ratio. Learns which features and timesteps matter. Use when multiple heterogeneous feature types are available.</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:12px; background:var(--bg3); border-radius:8px;">
+          <div style="width:32px; height:32px; background:var(--accent2); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#000; flex-shrink:0;">2</div>
+          <div><strong style="color:var(--accent2);">LSTM / BiLSTM</strong> — Most robust and best-documented choice. Excellent starting point. Strong literature backing for BTC specifically.</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:12px; background:var(--bg3); border-radius:8px;">
+          <div style="width:32px; height:32px; background:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#000; flex-shrink:0;">3</div>
+          <div><strong style="color:var(--yellow);">CNN-LSTM</strong> — Best when data contains strong technical patterns (intraday with candlestick patterns, volume spikes).</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:12px; background:var(--bg3); border-radius:8px;">
+          <div style="width:32px; height:32px; background:var(--muted); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#000; flex-shrink:0;">4</div>
+          <div><strong style="color:var(--muted);">XGBoost baseline</strong> — Always train as baseline. If deep learning doesn't beat it significantly, added complexity is not justified.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">References</div>
+      <ol style="font-size:12px; color:var(--muted); padding-left:20px; line-height:2;">
+        <li>Köse, N. et al. (2025). Deep Learning and ML Insights Into the Global Economic Drivers of the Bitcoin Price. <em>Journal of Forecasting</em>, 44, 1666-1698.</li>
+        <li>Lim, B. et al. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. <em>Int. J. Forecast.</em>, 37, 1748-1764.</li>
+        <li>Critien, J.V. et al. (2024). Deep learning for Bitcoin price direction prediction. <em>Financial Innovation</em>, 10.</li>
+        <li>Bai, S. et al. (2018). An Empirical Evaluation of Generic Convolutional and Recurrent Networks. <em>arXiv:1803.01271</em>.</li>
+        <li>Chen, T. & Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System. <em>KDD 2016</em>.</li>
+        <li>Vaswani, A. et al. (2017). Attention Is All You Need. <em>NeurIPS 2017</em>.</li>
+        <li>Frontiers in AI (2025). Predicting the Bitcoin's price using AI.</li>
+        <li>ScienceDirect (2025). Using machine and deep learning models, on-chain data, and technical analysis for predicting bitcoin price direction and magnitude.</li>
+      </ol>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ─── Tab switching ──────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'performance' && !chartsBuilt) buildCharts();
+  if (name === 'simulator') runSim();
+  if (name === 'features' && !featChartBuilt) buildFeatureChart();
+}
+
+// ─── Data ───────────────────────────────────────────────────────────────────
+const models = ['LSTM','BiLSTM','GRU','CNN-LSTM','Transformer','TFT','XGBoost'];
+// Illustrative values — replace with actual results from 04_results_analysis.ipynb
+const f1Data      = [0.61, 0.62, 0.59, 0.64, 0.57, 0.66, 0.60];
+const accData     = [0.58, 0.59, 0.57, 0.61, 0.55, 0.63, 0.59];
+const aucData     = [0.62, 0.63, 0.60, 0.65, 0.59, 0.67, 0.62];
+const precData    = [0.60, 0.61, 0.58, 0.63, 0.56, 0.65, 0.60];
+const recallData  = [0.62, 0.63, 0.60, 0.65, 0.58, 0.67, 0.61];
+const colors = [
+  '#58a6ff','#79c0ff','#56d364','#f7931a','#d2a8ff','#ffa657','#e3b341'
+];
+const chartDefaults = {
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } },
+    y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' }, min: 0, max: 1 }
+  }
+};
+
+let chartsBuilt = false;
+let featChartBuilt = false;
+let threshChart = null;
+let sigChart = null;
+
+// ─── Performance Charts ──────────────────────────────────────────────────────
+function buildCharts() {
+  chartsBuilt = true;
+
+  // F1 chart
+  new Chart(document.getElementById('f1Chart'), {
+    type: 'bar',
+    data: {
+      labels: models,
+      datasets: [{
+        data: f1Data,
+        backgroundColor: colors.map((c, i) => f1Data[i] === Math.max(...f1Data) ? '#3fb950' : c + '99'),
+        borderColor: colors.map((c, i) => f1Data[i] === Math.max(...f1Data) ? '#3fb950' : c),
+        borderWidth: 2, borderRadius: 6
+      }]
+    },
+    options: { ...chartDefaults, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` F1: ${(ctx.raw*100).toFixed(1)}%` } } } }
+  });
+
+  // Accuracy chart
+  new Chart(document.getElementById('accuracyChart'), {
+    type: 'bar',
+    data: {
+      labels: models,
+      datasets: [{
+        data: accData,
+        backgroundColor: colors.map((c, i) => accData[i] === Math.max(...accData) ? '#3fb950' : c + '99'),
+        borderColor: colors.map((c, i) => accData[i] === Math.max(...accData) ? '#3fb950' : c),
+        borderWidth: 2, borderRadius: 6
+      }]
+    },
+    options: { ...chartDefaults, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` Acc: ${(ctx.raw*100).toFixed(1)}%` } } } }
+  });
+
+  // AUC chart (horizontal bar)
+  new Chart(document.getElementById('aucChart'), {
+    type: 'bar',
+    data: {
+      labels: models,
+      datasets: [{
+        label: 'AUC-ROC',
+        data: aucData,
+        backgroundColor: colors.map((c, i) => aucData[i] === Math.max(...aucData) ? '#3fb95099' : c + '66'),
+        borderColor: colors.map((c, i) => aucData[i] === Math.max(...aucData) ? '#3fb950' : c),
+        borderWidth: 2, borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` AUC: ${ctx.raw.toFixed(3)}` } } },
+      scales: {
+        x: { min: 0.5, max: 0.75, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+
+  // Metrics table
+  const tbody = document.getElementById('metricsTableBody');
+  const sortedIdx = f1Data.map((v,i) => i).sort((a,b) => f1Data[b] - f1Data[a]);
+  sortedIdx.forEach((i, rank) => {
+    const isBest = rank === 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span style="color:${colors[i]}; font-weight:700;">${models[i]}</span> ${isBest ? '<span class="tag green" style="font-size:10px;">BEST</span>' : ''}</td>
+      <td class="${isBest?'best':''}">${(f1Data[i]*100).toFixed(1)}%
+        <div class="bar-wrap"><div class="bar-fill" style="width:${f1Data[i]*100}%; background:${colors[i]};"></div></div>
+      </td>
+      <td>${(accData[i]*100).toFixed(1)}%</td>
+      <td>${aucData[i].toFixed(3)}</td>
+      <td>${(precData[i]*100).toFixed(1)}%</td>
+      <td>${(recallData[i]*100).toFixed(1)}%</td>
+      <td style="color:var(--muted); font-size:11px;">${i < 6 ? 'PyTorch DL' : 'XGBoost'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // CM (illustrative)
+  document.getElementById('cm-tn').textContent = '89';
+  document.getElementById('cm-fp').textContent = '71';
+  document.getElementById('cm-fn').textContent = '65';
+  document.getElementById('cm-tp').textContent = '108';
+
+  // Threshold chart
+  buildThresholdChart(0.5);
+}
+
+// ─── Feature Importance Chart ─────────────────────────────────────────────────
+function buildFeatureChart() {
+  featChartBuilt = true;
+  const labels = ['ret_7d_btc','mvrv','ret_30d_btc','funding_rate','vol_7d_btc','ret_7d_xau','mom_30d_btc','nupl','ret_1d_btc','google_trends','hashrate','vol_30d_vix','ret_7d_snp500','dow_sin','fedfunds'];
+  const vals   = [0.092, 0.084, 0.078, 0.071, 0.068, 0.063, 0.059, 0.055, 0.052, 0.048, 0.042, 0.038, 0.034, 0.021, 0.018];
+  new Chart(document.getElementById('featureImportanceChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: vals.map((v, i) => i < 4 ? '#f7931a99' : '#58a6ff55'),
+        borderColor:     vals.map((v, i) => i < 4 ? '#f7931a' : '#58a6ff'),
+        borderWidth: 1, borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#e6edf3', font: { size: 11, family: 'monospace' } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── Threshold Chart ──────────────────────────────────────────────────────────
+function buildThresholdChart(t) {
+  const thresholds = Array.from({length: 61}, (_, i) => 0.2 + i * 0.01);
+  // Simulate precision/recall curve (logistic-like shape)
+  const precision = thresholds.map(th => Math.min(0.9, 0.4 + th * 0.7 + Math.random() * 0.02));
+  const recall    = thresholds.map(th => Math.max(0.1, 0.95 - th * 0.9 + Math.random() * 0.02));
+  const f1        = precision.map((p, i) => 2*p*recall[i]/(p+recall[i]));
+
+  const ctx = document.getElementById('thresholdChart');
+  if (threshChart) threshChart.destroy();
+  threshChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: thresholds.map(v => v.toFixed(2)),
+      datasets: [
+        { label: 'Precision', data: precision, borderColor: '#f7931a', tension: 0.4, pointRadius: 0, borderWidth: 2 },
+        { label: 'Recall',    data: recall,    borderColor: '#58a6ff', tension: 0.4, pointRadius: 0, borderWidth: 2 },
+        { label: 'F1',        data: f1,        borderColor: '#3fb950', tension: 0.4, pointRadius: 0, borderWidth: 2, borderDash: [4,2] }
+      ]
+    },
+    options: {
+      plugins: { legend: { labels: { color: '#8b949e', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: '#21262d' } },
+        y: { min: 0, max: 1, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: '#21262d' } }
+      }
+    }
+  });
+  updateThresholdStats(t);
+}
+
+function updateThreshold(val) {
+  document.getElementById('thresholdVal').textContent = parseFloat(val).toFixed(2);
+  updateThresholdStats(parseFloat(val));
+}
+
+function updateThresholdStats(t) {
+  const prec = Math.min(0.92, 0.42 + t * 0.72);
+  const rec  = Math.max(0.10, 0.96 - t * 0.88);
+  const f1   = 2 * prec * rec / (prec + rec);
+  document.getElementById('thresh-precision').querySelector('div:last-child').textContent = (prec*100).toFixed(0) + '%';
+  document.getElementById('thresh-recall').querySelector('div:last-child').textContent    = (rec*100).toFixed(0) + '%';
+  document.getElementById('thresh-f1').querySelector('div:last-child').textContent        = (f1*100).toFixed(0) + '%';
+}
+
+// ─── Simulator ──────────────────────────────────────────────────────────────
+const scenarios = {
+  bull:    { btc7: 12, vol30: 3.5, mvrv: 2.2, fund: 0.05,  gold7: -0.5, vix: 15, trends: 60 },
+  bear:    { btc7: -18, vol30: 9,  mvrv: 1.2, fund: -0.03, gold7: 2.0,  vix: 45, trends: 30 },
+  neutral: { btc7: 0,  vol30: 4,   mvrv: 2.0, fund: 0.01,  gold7: 0,    vix: 22, trends: 40 },
+  fomo:    { btc7: 20, vol30: 8,   mvrv: 4.2, fund: 0.25,  gold7: -1,   vix: 18, trends: 95 },
+};
+
+function loadScenario(name) {
+  const s = scenarios[name];
+  document.getElementById('s-btc7').value   = s.btc7;
+  document.getElementById('s-vol30').value  = s.vol30;
+  document.getElementById('s-mvrv').value   = s.mvrv;
+  document.getElementById('s-fund').value   = s.fund;
+  document.getElementById('s-gold7').value  = s.gold7;
+  document.getElementById('s-vix').value    = s.vix;
+  document.getElementById('s-trends').value = s.trends;
+  runSim();
+}
+
+function runSim() {
+  const btc7   = parseFloat(document.getElementById('s-btc7').value);
+  const vol30  = parseFloat(document.getElementById('s-vol30').value);
+  const mvrv   = parseFloat(document.getElementById('s-mvrv').value);
+  const fund   = parseFloat(document.getElementById('s-fund').value);
+  const gold7  = parseFloat(document.getElementById('s-gold7').value);
+  const vix    = parseFloat(document.getElementById('s-vix').value);
+  const trends = parseFloat(document.getElementById('s-trends').value);
+
+  // Update labels
+  document.getElementById('val-btc7').textContent   = btc7.toFixed(1) + '%';
+  document.getElementById('val-vol30').textContent  = vol30.toFixed(1) + '%';
+  document.getElementById('val-mvrv').textContent   = mvrv.toFixed(2);
+  document.getElementById('val-fund').textContent   = (fund*100).toFixed(2) + '%';
+  document.getElementById('val-gold7').textContent  = gold7.toFixed(1) + '%';
+  document.getElementById('val-vix').textContent    = vix.toFixed(0);
+  document.getElementById('val-trends').textContent = trends.toFixed(0);
+
+  // Simulate contributions (weighted heuristic — not actual model)
+  const contributions = {
+    'BTC 7d return':  clamp(btc7 / 20, -1, 1) * 0.28,
+    'MVRV ratio':     (mvrv < 1 ? 0.3 : mvrv < 2.5 ? 0.05 : mvrv < 3.7 ? -0.1 : -0.3),
+    'Funding rate':   (fund < 0 ? 0.1 : fund < 0.05 ? fund * 2 : fund < 0.15 ? 0.1 : -0.2),
+    'Volatility':     clamp(-vol30 / 15, -0.3, 0.1),
+    'Gold return':    clamp(-gold7 / 5, -0.15, 0.15),
+    'VIX level':      clamp(-(vix - 20) / 60, -0.25, 0.1),
+    'Google Trends':  (trends > 80 ? -0.15 : trends > 60 ? -0.05 : trends > 40 ? 0 : 0.05),
+  };
+
+  const rawScore = Object.values(contributions).reduce((a, b) => a + b, 0);
+  const prob = sigmoid(rawScore * 3 + 0.1);
+
+  // Update UI
+  const probPct = Math.round(prob * 100);
+  document.getElementById('sim-prob').textContent = probPct + '%';
+  document.getElementById('sim-bar').style.width  = probPct + '%';
+
+  const isUp = prob >= 0.5;
+  document.getElementById('sim-dir').textContent  = isUp ? '↑ BULLISH' : '↓ BEARISH';
+  document.getElementById('sim-dir').style.color  = isUp ? '#3fb950' : '#f85149';
+
+  const conf = Math.abs(prob - 0.5) * 2;
+  const confLabel = conf < 0.2 ? 'Very uncertain' : conf < 0.4 ? 'Uncertain' : conf < 0.6 ? 'Moderate confidence' : conf < 0.8 ? 'Confident' : 'Very confident';
+  document.getElementById('sim-conf').textContent = `Confidence: ${(conf*100).toFixed(0)}% — ${confLabel}`;
+
+  updateSignalChart(contributions);
+}
+
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+function clamp(x, min, max) { return Math.max(min, Math.min(max, x)); }
+
+function updateSignalChart(contributions) {
+  const ctx = document.getElementById('signalChart');
+  const labels = Object.keys(contributions);
+  const data   = Object.values(contributions);
+  if (sigChart) sigChart.destroy();
+  sigChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map(v => v >= 0 ? '#3fb95066' : '#f8514966'),
+        borderColor:     data.map(v => v >= 0 ? '#3fb950' : '#f85149'),
+        borderWidth: 2, borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.raw >= 0 ? '+' : ''}${(ctx.raw*100).toFixed(1)} (${ctx.raw >= 0 ? 'Bullish' : 'Bearish'})` } } },
+      scales: {
+        x: { min: -0.35, max: 0.35, ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#e6edf3', font: { size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+buildFeatureChart();
+runSim();
+// Trigger threshold chart when tab opens
+document.querySelector('[onclick="showTab(\'performance\')"]').addEventListener('click', () => {
+  if (!threshChart) setTimeout(() => buildThresholdChart(0.5), 100);
+});
+</script>
+</body>
+</html>
