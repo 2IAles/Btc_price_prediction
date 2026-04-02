@@ -4,6 +4,7 @@ import yfinance as yf
 from datetime import date, datetime, timedelta
 import time
 
+# Dossier où tous les fichiers CSV daily sont stockés
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DATE_COL = "Date"
 OHLCV_COLS = ["Open", "High", "Low", "Close", "Volume"]
@@ -11,6 +12,7 @@ ALL_COLS = [DATE_COL] + OHLCV_COLS
 
 
 def _load_daily(path: str) -> pd.DataFrame:
+    """Charge un CSV OHLCV daily ; retourne un DataFrame vide si le fichier n'existe pas."""
     if not os.path.isfile(path):
         return pd.DataFrame(columns=ALL_COLS)
     df = pd.read_csv(path, parse_dates=[DATE_COL])
@@ -19,12 +21,14 @@ def _load_daily(path: str) -> pd.DataFrame:
 
 
 def _last_date(df: pd.DataFrame):
+    """Retourne la date la plus récente du DataFrame, ou None si vide."""
     if df.empty:
         return None
     return df[DATE_COL].max()
 
 
 def _save(df: pd.DataFrame, path: str) -> None:
+    """Sauvegarde un DataFrame OHLCV en CSV, trié et dédoublonné."""
     os.makedirs(DATA_DIR, exist_ok=True)
     df = df.sort_values(DATE_COL).drop_duplicates(DATE_COL).reset_index(drop=True)
     df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.strftime("%Y-%m-%d")
@@ -33,12 +37,14 @@ def _save(df: pd.DataFrame, path: str) -> None:
 
 
 def _flatten_yf(df: pd.DataFrame) -> pd.DataFrame:
+    """Aplatit les colonnes MultiIndex que yfinance >= 1.0 peut retourner."""
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] for col in df.columns]
     return df
 
 
 def _download_yf(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Télécharge des données OHLCV journalières via yfinance et normalise le format."""
     raw = yf.download(
         ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False
     )
@@ -46,10 +52,12 @@ def _download_yf(ticker: str, start: str, end: str) -> pd.DataFrame:
         return pd.DataFrame()
     df = _flatten_yf(raw).reset_index()
 
+    # Normalise les noms de colonnes (capitalize) pour uniformiser les sources
     df.columns = [
         c.capitalize() if c.lower() != "date" else DATE_COL for c in df.columns
     ]
 
+    # Gère les deux noms possibles de la colonne date selon les versions yfinance
     for alias in ["Date", "Datetime"]:
         if alias in df.columns:
             df = df.rename(columns={alias: DATE_COL})
@@ -65,21 +73,27 @@ def _download_yf(ticker: str, start: str, end: str) -> pd.DataFrame:
 
 
 def _btc_from_local(after: date | None) -> pd.DataFrame:
+    """Rééchantillonne le fichier 1-minute local en données journalières.
+    Open = premier prix du jour, High = max, Low = min, Close = dernier, Volume = somme.
+    """
     src = os.path.join(DATA_DIR, "btcusd_1-min_data.csv")
     if not os.path.isfile(src):
         return pd.DataFrame()
     df = pd.read_csv(
         src, usecols=["Timestamp", "Open", "High", "Low", "Close", "Volume"]
     )
+    # Convertit les timestamps Unix en dates lisibles
     df["Timestamp"] = pd.to_datetime(df["Timestamp"], unit="s", utc=True)
     df[DATE_COL] = df["Timestamp"].dt.date
     df = df.drop(columns="Timestamp")
 
+    # Filtre pour ne traiter que les données après la dernière date connue
     if after is not None:
         df = df[df[DATE_COL] > after]
     if df.empty:
         return pd.DataFrame()
 
+    # Agrégation minute → jour (OHLCV standard)
     daily = (
         df.groupby(DATE_COL)
         .agg(
@@ -96,6 +110,7 @@ def _btc_from_local(after: date | None) -> pd.DataFrame:
 
 
 def update_btc(verbose: bool = True) -> None:
+    """Met à jour btc_daily.csv : d'abord depuis le fichier 1-min local, puis via yfinance."""
     path = os.path.join(DATA_DIR, "btc_daily.csv")
     existing = _load_daily(path)
     last = _last_date(existing)
@@ -103,6 +118,7 @@ def update_btc(verbose: bool = True) -> None:
     if verbose:
         print(f"\n{'='*50}")
         print(f"BTC  — last date: {last or 'none (first run)'}")
+    # Essaie d'abord de couvrir les données manquantes depuis le fichier local 1-min
     local_daily = _btc_from_local(after=last)
 
     if not local_daily.empty:
@@ -120,6 +136,7 @@ def update_btc(verbose: bool = True) -> None:
     )
     yf_end = (today + timedelta(days=1)).strftime("%Y-%m-%d")
 
+    # Complète avec yfinance pour les jours plus récents que le fichier local
     yf_daily = pd.DataFrame()
     if local_max is None or local_max < today:
         if verbose:
@@ -128,6 +145,7 @@ def update_btc(verbose: bool = True) -> None:
         if verbose:
             print(f"  [BTC] yfinance returned {len(yf_daily)} rows.")
 
+    # Fusionne les trois sources : existant + local + yfinance, puis dédoublonne
     frames = [existing, local_daily, yf_daily]
     combined = pd.concat([f for f in frames if not f.empty], ignore_index=True)
     _save(combined, path)
@@ -381,7 +399,7 @@ def update_vix(verbose: bool = True) -> None:
 
 
 def _load_single(path: str) -> pd.DataFrame:
-    """Load a Date,Value CSV; returns empty DataFrame if absent."""
+    """Charge un CSV Date,Value (indicateurs scalaires) ; retourne un DataFrame vide si absent."""
     if not os.path.isfile(path):
         return pd.DataFrame(columns=[DATE_COL, "Value"])
     df = pd.read_csv(path, parse_dates=[DATE_COL])
@@ -390,6 +408,7 @@ def _load_single(path: str) -> pd.DataFrame:
 
 
 def _save_single(df: pd.DataFrame, path: str) -> None:
+    """Sauvegarde une série Date,Value en CSV, triée et dédoublonnée."""
     os.makedirs(DATA_DIR, exist_ok=True)
     df = df.sort_values(DATE_COL).drop_duplicates(DATE_COL).reset_index(drop=True)
     df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.strftime("%Y-%m-%d")
@@ -441,6 +460,7 @@ def update_us10y(verbose: bool = True) -> None:
 
 
 def update_fedfunds(verbose: bool = True) -> None:
+    """Met à jour le taux des Fed Funds depuis l'API publique FRED (St. Louis Fed)."""
     import requests
     from io import StringIO
 
@@ -460,6 +480,7 @@ def update_fedfunds(verbose: bool = True) -> None:
 
     start = (last + timedelta(days=1)).strftime("%Y-%m-%d") if last else "2012-01-01"
 
+    # Télécharge la série DFF (taux journalier effectif) depuis FRED en CSV public
     url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF"
     if verbose:
         print(f"  [FED] fetching FRED DFF from {start} …")
@@ -469,9 +490,11 @@ def update_fedfunds(verbose: bool = True) -> None:
     df = pd.read_csv(StringIO(r.text))
     df.columns = [DATE_COL, "Value"]
     df[DATE_COL] = pd.to_datetime(df[DATE_COL]).dt.date
+    # errors="coerce" : transforme les valeurs non numériques (ex: ".") en NaN
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
     df = df[df[DATE_COL] >= date(2012, 1, 1)].dropna()
 
+    # Ne conserve que les nouvelles données
     if last is not None:
         df = df[df[DATE_COL] > last]
 
@@ -569,6 +592,9 @@ def update_silver(verbose: bool = True) -> None:
 
 
 def update_funding_rate(verbose: bool = True) -> None:
+    """Met à jour le funding rate BTC depuis l'API Binance Futures (BTCUSDT perpétuel).
+    Le funding rate est publié 3 fois par jour (00h, 08h, 16h UTC) et est moyenné en daily.
+    """
     import requests as _req
     import time
 
@@ -589,7 +615,7 @@ def update_funding_rate(verbose: bool = True) -> None:
     start_dt = (
         datetime(last.year, last.month, last.day) + timedelta(days=1)
         if last
-        else datetime(2019, 9, 10)
+        else datetime(2019, 9, 10)  # date de lancement des perpetuals Binance
     )
     end_dt = datetime(today.year, today.month, today.day) + timedelta(days=1)
 
@@ -602,11 +628,12 @@ def update_funding_rate(verbose: bool = True) -> None:
     if verbose:
         print(f"  [FUND] fetching Binance funding rates from {start_dt.date()} …")
 
+    # Pagination par fenêtres de 90 jours pour respecter les limites de l'API
     while current < end_dt:
         window_end = min(current + timedelta(days=90), end_dt)
         params = {
             "symbol": symbol,
-            "startTime": int(current.timestamp() * 1000),
+            "startTime": int(current.timestamp() * 1000),  # timestamp en millisecondes
             "endTime": int(window_end.timestamp() * 1000),
             "limit": limit,
         }
@@ -627,7 +654,7 @@ def update_funding_rate(verbose: bool = True) -> None:
     df = pd.DataFrame(all_rows)
     df[DATE_COL] = pd.to_datetime(df["fundingTime"], unit="ms").dt.date
     df["Value"] = df["fundingRate"].astype(float)
-    # Average the three daily funding rates (00:00, 08:00, 16:00 UTC)
+    # Moyenne les trois taux journaliers (00:00, 08:00, 16:00 UTC) en une seule valeur
     daily = df.groupby(DATE_COL)["Value"].mean().reset_index()
     daily = daily[daily[DATE_COL] < today]
 
@@ -700,6 +727,9 @@ def update_hashrate(verbose: bool = True) -> None:
 
 
 def _fetch_coinmetrics(metric: str, start: str, verbose: bool) -> pd.DataFrame:
+    """Télécharge une métrique on-chain depuis l'API communautaire CoinMetrics.
+    Gère la pagination automatiquement via next_page_token.
+    """
     import requests as _req
 
     url = "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics"
@@ -711,6 +741,7 @@ def _fetch_coinmetrics(metric: str, start: str, verbose: bool) -> pd.DataFrame:
         "page_size": 1000,
     }
 
+    # Boucle de pagination : continue tant qu'il y a un token de page suivante
     while True:
         r = _req.get(url, params=params, timeout=30)
         r.raise_for_status()
@@ -720,7 +751,7 @@ def _fetch_coinmetrics(metric: str, start: str, verbose: bool) -> pd.DataFrame:
         if not next_token:
             break
         params = {**params, "next_page_token": next_token}
-        params.pop("start_time", None)
+        params.pop("start_time", None)  # start_time est ignoré si next_page_token est présent
 
     if not rows:
         return pd.DataFrame()
@@ -732,6 +763,10 @@ def _fetch_coinmetrics(metric: str, start: str, verbose: bool) -> pd.DataFrame:
 
 
 def update_mvrv_nupl(verbose: bool = True) -> None:
+    """Met à jour le MVRV et dérive le NUPL depuis CoinMetrics.
+    MVRV = Market Value / Realized Value (>1 = surévalué).
+    NUPL = 1 - 1/MVRV (mesure les profits latents des holders).
+    """
     mvrv_path = os.path.join(DATA_DIR, "btc_mvrv_daily.csv")
     nupl_path = os.path.join(DATA_DIR, "btc_nupl_daily.csv")
 
@@ -761,11 +796,11 @@ def update_mvrv_nupl(verbose: bool = True) -> None:
     if verbose:
         print(f"  [MVRV] {len(new_mvrv)} new rows.")
 
-    # MVRV
+    # Sauvegarde du MVRV
     combined_mvrv = pd.concat([existing_mvrv, new_mvrv], ignore_index=True)
     _save_single(combined_mvrv, mvrv_path)
 
-    # NUPL = 1 - (1 / MVRV)
+    # NUPL dérivé du MVRV : NUPL = 1 - (1 / MVRV)
     all_mvrv = _load_single(mvrv_path)
     nupl_df = all_mvrv.copy()
     nupl_df["Value"] = (1 - (1 / nupl_df["Value"])).round(6)
@@ -784,13 +819,14 @@ def update_mvrv_nupl(verbose: bool = True) -> None:
 
 
 def _fetch_trends_window(pt, ws: date, we: date, retries: int = 3) -> pd.DataFrame:
+    """Récupère une fenêtre de Google Trends avec retry en cas d'erreur (rate-limit fréquent)."""
     import time
 
     timeframe = f"{ws.strftime('%Y-%m-%d')} {we.strftime('%Y-%m-%d')}"
     for attempt in range(retries):
         try:
             pt.build_payload(["bitcoin"], timeframe=timeframe)
-            time.sleep(2)
+            time.sleep(2)  # pause obligatoire pour éviter le blocage par Google
             df = pt.interest_over_time()
             if df.empty:
                 return pd.DataFrame()
@@ -808,6 +844,10 @@ def _fetch_trends_window(pt, ws: date, we: date, retries: int = 3) -> pd.DataFra
 
 
 def update_google_trends(verbose: bool = True) -> None:
+    """Met à jour l'intérêt Google pour 'bitcoin' (normalisé 0-100) depuis pytrends.
+    Fait une requête mensuelle sur toute l'histoire 2012→aujourd'hui.
+    Pas de mise à jour si les données ont moins de 30 jours.
+    """
     try:
         from pytrends.request import TrendReq
     except ImportError:
@@ -823,6 +863,7 @@ def update_google_trends(verbose: bool = True) -> None:
     if verbose:
         print(f"\n{'='*50}")
         print(f"Google Trends — last date: {last or 'none (first run)'}")
+    # Google Trends ne met à jour les données que toutes les semaines environ
     if last and (today - last).days < 30:
         if verbose:
             print("  [TRENDS] already up to date (updated within last 30 days).")
@@ -836,6 +877,7 @@ def update_google_trends(verbose: bool = True) -> None:
         )
 
     df = pd.DataFrame()
+    # Retry loop : Google peut bloquer temporairement les requêtes répétées
     for attempt in range(3):
         try:
             pt.build_payload(["bitcoin"], timeframe=timeframe)
@@ -858,6 +900,7 @@ def update_google_trends(verbose: bool = True) -> None:
 
     result_df = df.reset_index()
     result_df.columns = [DATE_COL, "Value"]
+    # clip(0, 100) : garantit que les valeurs restent dans la plage Google Trends
     result_df["Value"] = result_df["Value"].clip(0, 100).round(2)
     result_df[DATE_COL] = pd.to_datetime(result_df[DATE_COL]).dt.date
 
@@ -874,6 +917,7 @@ def update_google_trends(verbose: bool = True) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Lance la mise à jour de toutes les sources de données dans l'ordre
     update_btc()
     update_xau()
     update_eth()
@@ -887,5 +931,5 @@ if __name__ == "__main__":
     update_funding_rate()
     update_hashrate()
     update_mvrv_nupl()
-    update_google_trends()
+    update_google_trends()  # lent (~2 min) : fait ~19 requêtes HTTP séquentielles
     print("\nDone.")
