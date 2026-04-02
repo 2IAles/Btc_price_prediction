@@ -50,8 +50,8 @@ class Trainer:
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.5, patience=5
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=epochs, eta_min=1e-6
         )
 
         self.early_stopping = EarlyStopping(patience=patience)
@@ -113,7 +113,7 @@ class Trainer:
             self.history["train_loss"].append(avg_train_loss)
             self.history["val_loss"].append(avg_val_loss)
 
-            self.scheduler.step(avg_val_loss)
+            self.scheduler.step()
 
             if verbose and (epoch + 1) % 10 == 0:
                 elapsed = time.time() - start_time
@@ -128,7 +128,7 @@ class Trainer:
 
             if self.early_stopping.check(avg_val_loss, self.model):
                 if verbose:
-                    print(f"  → Early stopping à l'époque {epoch+1}")
+                    print(f"  → Early stopping à l'époch {epoch+1}")
                 break
 
         if self.early_stopping.best_model_state is not None:

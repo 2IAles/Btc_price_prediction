@@ -46,12 +46,10 @@ def _download_yf(ticker: str, start: str, end: str) -> pd.DataFrame:
         return pd.DataFrame()
     df = _flatten_yf(raw).reset_index()
 
-    # Normalise column names (yfinance capitalises them)
     df.columns = [
         c.capitalize() if c.lower() != "date" else DATE_COL for c in df.columns
     ]
 
-    # Rename index column (yfinance may call it "Date" or "Datetime")
     for alias in ["Date", "Datetime"]:
         if alias in df.columns:
             df = df.rename(columns={alias: DATE_COL})
@@ -153,7 +151,6 @@ def _xau_from_local(after: date | None) -> pd.DataFrame:
 
     print("  [XAU] reading local 1h CSV …")
     df = pd.read_csv(src, sep=";")
-    # Raw "Date" column is "YYYY.MM.DD HH:MM" → convert to date object in-place
     df["Date"] = pd.to_datetime(df["Date"], format="%Y.%m.%d %H:%M").dt.date
     df = df.rename(columns={"Date": DATE_COL})
 
