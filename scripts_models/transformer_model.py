@@ -69,11 +69,8 @@ class TransformerModel(nn.Module):
 
         x = self.transformer_encoder(x)
 
-        # On prend la sortie de la dernière position temporelle
-        # (résume l'attention sur toute la séquence)
         x = x[:, -1, :]
 
-        # Couches de sortie
         x = self.dropout_layer(x)
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
